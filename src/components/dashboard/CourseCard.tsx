@@ -26,7 +26,7 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
 
   return (
     <motion.div
-      className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-xl flex flex-col"
+      className="relative overflow-hidden rounded-2xl flex flex-col bg-card/80 backdrop-blur-sm border border-white/20 shadow-xl"
       whileHover={{ scale: 1.02, y: -5 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -54,7 +54,7 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
         </div>
         <CardDescription className="text-gray-600 dark:text-gray-300">{course.description}</CardDescription>
       </CardContent>
-      <CardFooter className="relative flex flex-col items-start gap-4 p-6 pt-0">
+      <CardFooter className="relative flex flex-col items-start gap-4 p-6 pt-0 mt-auto">
         <div className="w-full">
           <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
             <span>Progress</span>

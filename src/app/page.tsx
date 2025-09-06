@@ -1,8 +1,9 @@
 import { getCourses, getUserProgress, getAchievementsByStudentId } from '@/lib/data';
 import { CourseCard } from '@/components/dashboard/CourseCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookOpenCheck, Trophy } from 'lucide-react';
+import { BookOpenCheck, Trophy, CheckCircle } from 'lucide-react';
 import { AchievementCard } from '@/components/dashboard/AchievementCard';
+import { Separator } from '@/components/ui/separator';
 
 export default function Dashboard() {
   const courses = getCourses();
@@ -49,7 +50,7 @@ export default function Dashboard() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium">Overall Completion</CardTitle>
-                        <Trophy className="w-4 h-4 text-muted-foreground" />
+                        <CheckCircle className="w-4 h-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{Math.round(overallCompletion)}%</div>
@@ -71,9 +72,12 @@ export default function Dashboard() {
                     </CardContent>
                 </Card>
             </div>
+            
+            <div className="flex items-center justify-between mb-4">
+               <h2 className="text-2xl font-semibold" id="courses">My Courses</h2>
+            </div>
+            <Separator className="mb-6"/>
 
-
-            <h2 className="text-2xl font-semibold mb-4" id="courses">My Courses</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {courses.map((course) => (
                 <CourseCard key={course.id} course={course} userProgress={userProgress} />
@@ -83,7 +87,7 @@ export default function Dashboard() {
         </div>
 
         <aside className="space-y-8">
-          <Card className="bg-card/80 backdrop-blur-sm">
+          <Card className="bg-card/80 backdrop-blur-sm sticky top-24">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg font-medium">Recent Achievements</CardTitle>
               <Trophy className="w-5 h-5 text-muted-foreground" />
