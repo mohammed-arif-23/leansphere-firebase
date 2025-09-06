@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { TextContent } from '@/components/course/TextContent';
 
 export default function ModulePage({ params }: { params: { courseId: string, moduleId: string } }) {
-  const module = getModuleById(params.courseId, params.moduleId);
+  const module = getModuleById(params.moduleId);
   const course = getCourseById(params.courseId);
 
   if (!module || !course) {

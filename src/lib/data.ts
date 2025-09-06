@@ -30,6 +30,17 @@ const courses: Course[] = [
     modules: javaModules,
     difficulty: 'beginner',
     estimatedHours: 10,
+    isPublished: true,
+    tags: ['Java', 'Programming', 'Beginner'],
+    prerequisites: [],
+    learningObjectives: [
+        'Understand Java basics',
+        'Write simple Java applications',
+        'Learn about variables and data types'
+    ],
+    createdAt: '2023-01-01T10:00:00Z',
+    updatedAt: '2023-01-01T10:00:00Z',
+    createdBy: 'admin-user',
   },
   {
     id: 'python-101',
@@ -41,6 +52,17 @@ const courses: Course[] = [
     modules: pythonModules,
     difficulty: 'beginner',
     estimatedHours: 8,
+    isPublished: true,
+    tags: ['Python', 'Data Science', 'Beginner'],
+    prerequisites: [],
+    learningObjectives: [
+        'Understand Python syntax',
+        'Work with lists and dictionaries',
+        'Create basic functions'
+    ],
+    createdAt: '2023-02-15T12:00:00Z',
+    updatedAt: '2023-02-15T12:00:00Z',
+    createdBy: 'admin-user',
   },
 ];
 
@@ -51,8 +73,16 @@ const userProgress: UserProgress = {
 
 export const getCourses = (): Course[] => courses;
 export const getCourseById = (id: string): Course | undefined => courses.find(c => c.id === id);
-export const getModuleById = (courseId: string, moduleId: string): Module | undefined => {
-  const course = getCourseById(courseId);
-  return course?.modules.find(m => m.id === moduleId);
-}
+
+// Updated to find a module by its ID across all courses
+export const getModuleById = (moduleId: string): Module | undefined => {
+  for (const course of courses) {
+    const module = course.modules.find(m => m.id === moduleId);
+    if (module) {
+      return module;
+    }
+  }
+  return undefined;
+};
+
 export const getUserProgress = (studentId: string): UserProgress => userProgress;
