@@ -1,6 +1,5 @@
 import { getCourses, getUserProgress } from '@/lib/data';
 import { CourseCard } from '@/components/dashboard/CourseCard';
-import { Recommendations } from '@/components/dashboard/Recommendations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BookOpenCheck } from 'lucide-react';
 
@@ -32,7 +31,6 @@ export default function Dashboard() {
         </div>
 
         <aside className="space-y-8">
-          <Recommendations />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg font-medium">Activity</CardTitle>
