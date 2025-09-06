@@ -3,7 +3,6 @@
 import type { Module, Course } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,6 +13,7 @@ import { generateStarterCode } from '@/ai/flows/generate-starter-code';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { CheckCircle, Loader2, Sparkles, Terminal, XCircle } from 'lucide-react';
 import { gradeCode } from '@/ai/flows/automated-code-grading';
+import Editor from '@monaco-editor/react';
 
 interface CodingAssignmentProps {
   module: Module;
@@ -37,7 +37,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
 
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { code: '' },
+    defaultValues: { code: `// Start coding your solution for:\n// ${module.content}` },
   });
 
   const handleGenerateCode = async () => {
@@ -94,7 +94,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   };
 
   return (
-    <Card>
+    <Card className="bg-card/80 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Coding Assignment</CardTitle>
         <CardDescription>{module.content}</CardDescription>
@@ -108,13 +108,35 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-lg">Your Solution ({course.language})</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder={`// Your ${course.language} code here...`}
-                      className="min-h-[300px] font-code text-sm bg-accent/50 text-accent-foreground"
-                      {...field}
-                    />
-                  </FormControl>
+                   <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 mt-2">
+                     <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b dark:border-gray-700">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-3 h-3 rounded-full bg-red-500" />
+                          <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                          <div className="w-3 h-3 rounded-full bg-green-500" />
+                          <span className="ml-4 text-sm font-medium">
+                            {course.language === "Java" ? "Main.java" : "main.py"}
+                          </span>
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Editor
+                          height="400px"
+                          language={course.language.toLowerCase()}
+                          value={field.value}
+                          onChange={field.onChange}
+                          theme="vs-dark"
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 14,
+                            lineNumbers: "on",
+                            roundedSelection: false,
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                          }}
+                        />
+                      </FormControl>
+                   </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -138,7 +160,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               )}
               Generate Starter Code
             </Button>
-            <Button type="submit" disabled={isSubmitting} className='bg-accent text-accent-foreground hover:bg-accent/90'>
+            <Button type="submit" disabled={isSubmitting} className='bg-green-600 hover:bg-green-700'>
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (

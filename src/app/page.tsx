@@ -21,7 +21,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           <section>
-            <h2 className="text-2xl font-semibold mb-4">My Courses</h2>
+            <h2 className="text-2xl font-semibold mb-4" id="courses">My Courses</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {courses.map((course) => (
                 <CourseCard key={course.id} course={course} userProgress={userProgress} />
@@ -31,7 +31,7 @@ export default function Dashboard() {
         </div>
 
         <aside className="space-y-8">
-          <Card>
+          <Card className="bg-card/80 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg font-medium">Activity</CardTitle>
               <BookOpenCheck className="w-5 h-5 text-muted-foreground" />

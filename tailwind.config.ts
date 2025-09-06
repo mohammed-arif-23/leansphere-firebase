@@ -17,9 +17,11 @@ export default {
     },
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
-        code: ['monospace'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'system-ui', 'sans-serif'],
+        headline: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+        code: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',
@@ -35,6 +37,10 @@ export default {
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
+          '50': 'hsl(var(--primary-50))',
+          '500': 'hsl(var(--primary-500))',
+          '600': 'hsl(var(--primary-600))',
+          '900': 'hsl(var(--primary-900))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -51,6 +57,15 @@ export default {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+        },
+        success: {
+          DEFAULT: 'hsl(var(--success-500))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning-500))',
+        },
+        error: {
+          DEFAULT: 'hsl(var(--error-500))',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
