@@ -28,17 +28,22 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
       text: `I just earned the "${achievement.title}" badge on LearnSphere!`,
       url: window.location.origin,
     };
+    
+    const canShare = navigator.canShare && navigator.canShare(shareData);
 
-    if (navigator.share) {
+    if (canShare && navigator.share) {
       try {
         await navigator.share(shareData);
       } catch (error) {
-        console.error('Error sharing:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Could not share',
-          description: 'There was an error trying to share your achievement.',
-        })
+        // Fallback to clipboard if share fails, e.g., user cancels dialog
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+           navigator.clipboard.writeText(`${shareData.text} Check it out at ${shareData.url}`);
+            toast({
+                title: 'Sharing failed, Link Copied!',
+                description: 'Your achievement details have been copied to your clipboard instead.',
+            });
+        }
       }
     } else {
         // Fallback for browsers that don't support the Web Share API
