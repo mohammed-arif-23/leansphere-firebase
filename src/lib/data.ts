@@ -1,3 +1,4 @@
+
 import type { Course, UserProgress, Module, Achievement } from '@/types';
 
 const javaModules: Module[] = [
@@ -121,7 +122,27 @@ const achievements: Achievement[] = [
         iconUrl: '/icons/module-completion.svg',
         earnedAt: '2023-03-02T14:00:00Z',
         relatedCourseId: 'java-101',
-    }
+    },
+    {
+        id: 'ach-3',
+        studentId: 'student1',
+        type: 'perfect_score',
+        title: 'Flawless Victory',
+        description: 'You got a perfect score on a coding assignment.',
+        iconUrl: '/icons/perfect-score.svg',
+        earnedAt: '2023-03-05T18:00:00Z',
+        relatedCourseId: 'python-101',
+    },
+    {
+        id: 'ach-4',
+        studentId: 'student1',
+        type: 'course_completion',
+        title: 'Python Pioneer',
+        description: 'You completed the entire Python for Beginners course.',
+        iconUrl: '/icons/course-completion.svg',
+        earnedAt: '2023-03-10T20:00:00Z',
+        relatedCourseId: 'python-101',
+    },
 ]
 
 export const getCourses = (): Course[] => courses;

@@ -1,7 +1,8 @@
+
 'use client';
 
 import type { Achievement } from '@/types';
-import { Trophy, Code, BookOpen } from 'lucide-react';
+import { Trophy, Code, BookOpen, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface AchievementCardProps {
@@ -12,8 +13,8 @@ const iconMap: { [key in Achievement['type']]: React.ReactNode } = {
     first_submission: <Code className="h-full w-full" />,
     module_completion: <BookOpen className="h-full w-full" />,
     course_completion: <Trophy className="h-full w-full" />,
-    streak: <Trophy className="h-full w-full" />,
-    perfect_score: <Trophy className="h-full w-full" />,
+    streak: <Trophy className="h-full w-full" />, // Placeholder
+    perfect_score: <Star className="h-full w-full" />,
 }
 
 export function AchievementCard({ achievement }: AchievementCardProps) {
