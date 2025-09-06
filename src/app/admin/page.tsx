@@ -46,6 +46,19 @@ export default function AdminPage() {
                 </SelectContent>
               </Select>
             </div>
+             <div className="space-y-2">
+              <Label htmlFor="course-difficulty">Difficulty</Label>
+              <Select>
+                <SelectTrigger id="course-difficulty">
+                  <SelectValue placeholder="Select a difficulty" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="beginner">Beginner</SelectItem>
+                  <SelectItem value="intermediate">Intermediate</SelectItem>
+                  <SelectItem value="advanced">Advanced</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="course-image">Image URL</Label>
               <Input id="course-image" placeholder="https://picsum.photos/600/400" />
