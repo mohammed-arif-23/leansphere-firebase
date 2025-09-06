@@ -49,3 +49,12 @@ export interface Achievement {
   earnedAt: string;
   relatedCourseId?: string;
 }
+
+// Based on the design document's CodeExecutionResponse
+export interface CodeExecutionResponse {
+  success: boolean;
+  output: string;
+  errors?: string;
+  score: number;
+  feedback: string;
+}

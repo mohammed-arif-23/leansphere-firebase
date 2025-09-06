@@ -1,6 +1,6 @@
 'use client';
 
-import type { Module, Course } from '@/types';
+import type { Module, Course, CodeExecutionResponse } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useForm } from 'react-hook-form';
@@ -13,7 +13,6 @@ import { generateStarterCode } from '@/ai/flows/generate-starter-code';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { CheckCircle, Loader2, Sparkles, Terminal, XCircle, Play } from 'lucide-react';
 import Editor from '@monaco-editor/react';
-import type { ExecuteCodeOutput } from '@/ai/flows/execute-code';
 
 
 interface CodingAssignmentProps {
@@ -28,7 +27,7 @@ const FormSchema = z.object({
 export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [submissionResult, setSubmissionResult] = useState<ExecuteCodeOutput | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<CodeExecutionResponse | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof FormSchema>>({
@@ -70,17 +69,17 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: data.code,
-          language: course.language,
+          language: course.language.toLowerCase(),
           assignmentId: module.id,
-          assignmentPrompt: module.content,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to execute code');
+         const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to execute code');
       }
 
-      const result: ExecuteCodeOutput = await response.json();
+      const result: CodeExecutionResponse = await response.json();
       setSubmissionResult(result);
 
     } catch (error) {
@@ -88,7 +87,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to grade your code. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to execute your code. Please try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -119,7 +118,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                             <div className="w-3 h-3 rounded-full bg-yellow-500" />
                             <div className="w-3 h-3 rounded-full bg-green-500" />
                             <span className="ml-4 text-sm font-medium">
-                              {course.language === "Java" ? "Main.java" : "main.py"}
+                              {course.language === "Java" ? "Main.java" : course.language === "Python" ? "main.py" : "main.js"}
                             </span>
                           </div>
                         </div>
