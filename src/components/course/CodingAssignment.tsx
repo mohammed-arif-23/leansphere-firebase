@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Module, Course, CodeExecutionResponse } from '@/types';
@@ -272,9 +273,6 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               <Alert variant={submissionResult.success ? 'default' : 'destructive'} className="border-l-4 border-l-current">
                 {submissionResult.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 <AlertTitle>{submissionResult.success ? 'Success!' : 'Needs Improvement'} (Score: {submissionResult.score})</AlertTitle>
-                <AlertDescription>
-                  {submissionResult.feedback}
-                </AlertDescription>
               </Alert>
 
               {submissionResult.output && (
