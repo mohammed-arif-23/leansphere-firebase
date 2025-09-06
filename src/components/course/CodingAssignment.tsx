@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateStarterCode } from '@/ai/flows/generate-starter-code';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { CheckCircle, Loader2, Sparkles, Terminal, XCircle } from 'lucide-react';
+import { gradeCode } from '@/ai/flows/automated-code-grading';
 
 interface CodingAssignmentProps {
   module: Module;
@@ -23,10 +24,15 @@ const FormSchema = z.object({
   code: z.string().min(10, { message: 'Please write some code before submitting.' }),
 });
 
+type SubmissionResult = {
+  status: 'success' | 'error';
+  message: string;
+}
+
 export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [submissionResult, setSubmissionResult] = useState<'success' | 'error' | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof FormSchema>>({
@@ -58,20 +64,33 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
     }
   };
 
-  const onSubmit = (data: z.infer<typeof FormSchema>) => {
+  const onSubmit = async (data: z.infer<typeof FormSchema>) => {
     setIsSubmitting(true);
     setSubmissionResult(null);
 
-    // Simulate API call to Judge0
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.3; // Simulate success or failure
-      if (isSuccess) {
-        setSubmissionResult('success');
+    try {
+      const result = await gradeCode({
+        code: data.code,
+        assignmentPrompt: module.content,
+        programmingLanguage: course.language,
+      });
+      
+      if (result.score > 70) {
+        setSubmissionResult({ status: 'success', message: result.feedback });
       } else {
-        setSubmissionResult('error');
+        setSubmissionResult({ status: 'error', message: result.feedback });
       }
+
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to grade your code. Please try again.',
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -101,11 +120,11 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               )}
             />
              {submissionResult && (
-              <Alert variant={submissionResult === 'success' ? 'default' : 'destructive'} className="mt-4 border-green-500/50 text-green-700 dark:text-green-400 [&>svg]:text-green-500">
-                {submissionResult === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                <AlertTitle>{submissionResult === 'success' ? 'Success!' : 'Tests Failed'}</AlertTitle>
+              <Alert variant={submissionResult.status === 'success' ? 'default' : 'destructive'} className="mt-4">
+                {submissionResult.status === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                <AlertTitle>{submissionResult.status === 'success' ? 'Success!' : 'Needs Improvement'}</AlertTitle>
                 <AlertDescription>
-                  {submissionResult === 'success' ? 'All tests passed. Great job!' : 'One or more tests failed. Please review your code and try again.'}
+                  {submissionResult.message}
                 </AlertDescription>
               </Alert>
             )}
