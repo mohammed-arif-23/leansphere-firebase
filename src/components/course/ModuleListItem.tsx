@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Module } from '@/types';
-import { CheckCircle, Circle, Code, Video } from 'lucide-react';
+import { CheckCircle, Circle, Code, FileText, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ModuleListItemProps {
@@ -11,6 +11,7 @@ interface ModuleListItemProps {
 const iconMap = {
   video: <Video className="h-5 w-5 text-primary" />,
   code: <Code className="h-5 w-5 text-primary" />,
+  text: <FileText className="h-5 w-5 text-primary" />,
 };
 
 export function ModuleListItem({ module, isCompleted }: ModuleListItemProps) {

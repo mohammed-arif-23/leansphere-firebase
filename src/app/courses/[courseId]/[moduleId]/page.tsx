@@ -5,6 +5,7 @@ import { CodingAssignment } from '@/components/course/CodingAssignment';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { TextContent } from '@/components/course/TextContent';
 
 export default function ModulePage({ params }: { params: { courseId: string, moduleId: string } }) {
   const module = getModuleById(params.courseId, params.moduleId);
@@ -32,6 +33,7 @@ export default function ModulePage({ params }: { params: { courseId: string, mod
 
       <div>
         {module.type === 'video' && <VideoPlayer module={module} />}
+        {module.type === 'text' && <TextContent module={module} />}
         {module.type === 'code' && <CodingAssignment module={module} course={course} />}
       </div>
     </div>
