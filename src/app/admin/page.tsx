@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,26 +9,60 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import type { Course } from '@/types';
+import type { Course, Module } from '@/types';
+import { Loader2 } from 'lucide-react';
 
 export default function AdminPage() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(true);
+
+  // Course creation state
   const [courseTitle, setCourseTitle] = useState('');
   const [courseDesc, setCourseDesc] = useState('');
-  const [language, setLanguage] = useState('');
-  const [difficulty, setDifficulty] = useState('');
+  const [courseLanguage, setCourseLanguage] = useState('');
+  const [courseDifficulty, setCourseDifficulty] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingCourse, setIsSubmittingCourse] = useState(false);
+
+  // Module creation state
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [moduleTitle, setModuleTitle] = useState('');
+  const [moduleType, setModuleType] = useState<Module['type'] | ''>('');
+  const [moduleContent, setModuleContent] = useState('');
+  const [isSubmittingModule, setIsSubmittingModule] = useState(false);
+
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch('/api/learning/courses');
+        if (!response.ok) throw new Error('Failed to fetch courses');
+        const data = await response.json();
+        setCourses(data.courses);
+      } catch (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Could not load courses for module creation.',
+        });
+      } finally {
+        setIsLoadingCourses(false);
+      }
+    };
+    fetchCourses();
+  }, [toast]);
+
+
+  const handleCourseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setIsSubmittingCourse(true);
 
     const newCourseData: Partial<Course> = {
       title: courseTitle,
       description: courseDesc,
-      language: language as Course['language'],
-      difficulty: difficulty as Course['difficulty'],
+      language: courseLanguage as Course['language'],
+      difficulty: courseDifficulty as Course['difficulty'],
       estimatedHours: 10, // Placeholder
       imageUrl: imageUrl || 'https://picsum.photos/600/400',
     };
@@ -52,9 +86,11 @@ export default function AdminPage() {
       // Reset form
       setCourseTitle('');
       setCourseDesc('');
-      setLanguage('');
-      setDifficulty('');
+      setCourseLanguage('');
+      setCourseDifficulty('');
       setImageUrl('');
+      // Refresh course list
+      setCourses(prev => [...prev, createdCourse]);
 
     } catch (error) {
       toast({
@@ -63,7 +99,51 @@ export default function AdminPage() {
         description: error instanceof Error ? error.message : 'Something went wrong.',
       });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingCourse(false);
+    }
+  };
+
+  const handleModuleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingModule(true);
+
+    const newModuleData: Partial<Module> = {
+      courseId: selectedCourseId,
+      title: moduleTitle,
+      type: moduleType as Module['type'],
+      content: moduleContent,
+    };
+
+    try {
+      const response = await fetch('/api/learning/modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newModuleData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create module');
+      }
+
+      const createdModule = await response.json();
+      toast({
+        title: "Success!",
+        description: `Module "${createdModule.title}" has been created.`,
+      });
+      // Reset form
+      setSelectedCourseId('');
+      setModuleTitle('');
+      setModuleType('');
+      setModuleContent('');
+
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Something went wrong while creating module.',
+      });
+    } finally {
+      setIsSubmittingModule(false);
     }
   };
 
@@ -75,18 +155,19 @@ export default function AdminPage() {
           Admin Dashboard
         </h1>
         <p className="mt-2 text-lg text-muted-foreground">
-          Manage courses, modules, and users.
+          Manage courses, modules, and platform content.
         </p>
       </header>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+        {/* Create Course Card */}
         <Card>
           <CardHeader>
             <CardTitle>Create New Course</CardTitle>
             <CardDescription>Fill out the form to add a new course to the platform.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleCourseSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="course-title">Course Title</Label>
                 <Input id="course-title" placeholder="e.g., Advanced JavaScript" value={courseTitle} onChange={e => setCourseTitle(e.target.value)} required />
@@ -97,7 +178,7 @@ export default function AdminPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="course-lang">Programming Language</Label>
-                <Select value={language} onValueChange={setLanguage} required>
+                <Select value={courseLanguage} onValueChange={setCourseLanguage} required>
                   <SelectTrigger id="course-lang">
                     <SelectValue placeholder="Select a language" />
                   </SelectTrigger>
@@ -111,7 +192,7 @@ export default function AdminPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="course-difficulty">Difficulty</Label>
-                <Select value={difficulty} onValueChange={setDifficulty} required>
+                <Select value={courseDifficulty} onValueChange={setCourseDifficulty} required>
                   <SelectTrigger id="course-difficulty">
                     <SelectValue placeholder="Select a difficulty" />
                   </SelectTrigger>
@@ -126,35 +207,77 @@ export default function AdminPage() {
                 <Label htmlFor="course-image">Image URL</Label>
                 <Input id="course-image" placeholder="https://picsum.photos/600/400" value={imageUrl} onChange={e => setImageUrl(e.target.value)} />
               </div>
-              <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Course'}
+              <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmittingCourse}>
+                {isSubmittingCourse ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Creating...</> : 'Create Course'}
               </Button>
             </form>
           </CardContent>
         </Card>
 
+        {/* Create Module Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Platform Statistics</CardTitle>
-            <CardDescription>An overview of platform activity.</CardDescription>
+            <CardTitle>Create New Module</CardTitle>
+            <CardDescription>Add a new module to an existing course.</CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-background rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Users</p>
-              <p className="text-2xl font-bold">1,234</p>
-            </div>
-            <div className="p-4 bg-background rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Courses</p>
-              <p className="text-2xl font-bold">3</p>
-            </div>
-            <div className="p-4 bg-background rounded-lg">
-              <p className="text-sm text-muted-foreground">Modules Completed</p>
-              <p className="text-2xl font-bold">5,678</p>
-            </div>
-            <div className="p-4 bg-background rounded-lg">
-              <p className="text-sm text-muted-foreground">Daily Active Users</p>
-              <p className="text-2xl font-bold">45</p>
-            </div>
+          <CardContent>
+             {isLoadingCourses ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <form onSubmit={handleModuleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="module-course">Course</Label>
+                    <Select value={selectedCourseId} onValueChange={setSelectedCourseId} required>
+                      <SelectTrigger id="module-course">
+                        <SelectValue placeholder="Select a course" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courses.map(course => (
+                           <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="module-title">Module Title</Label>
+                    <Input id="module-title" placeholder="e.g., Introduction to Variables" value={moduleTitle} onChange={e => setModuleTitle(e.target.value)} required />
+                  </div>
+                   <div className="space-y-2">
+                    <Label htmlFor="module-type">Module Type</Label>
+                    <Select value={moduleType} onValueChange={(v) => setModuleType(v as Module['type'] | '')} required>
+                      <SelectTrigger id="module-type">
+                        <SelectValue placeholder="Select a type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                        <SelectItem value="code">Code Assignment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="module-content">Content</Label>
+                    <Textarea 
+                      id="module-content" 
+                      placeholder={
+                        moduleType === 'video' 
+                          ? 'Enter video URL...' 
+                          : moduleType === 'code'
+                          ? 'Enter coding assignment prompt...'
+                          : 'Enter markdown content...'
+                      }
+                      value={moduleContent} 
+                      onChange={e => setModuleContent(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isSubmittingModule}>
+                     {isSubmittingModule ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Creating...</> : 'Create Module'}
+                  </Button>
+                </form>
+              )}
           </CardContent>
         </Card>
       </div>
