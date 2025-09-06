@@ -1,6 +1,7 @@
+
 'use server';
 
-import { getCourses } from '@/lib/data';
+import { getCourses, addCourse } from '@/lib/data';
 import { NextResponse } from 'next/server';
 import type { Course } from '@/types';
 
@@ -11,34 +12,32 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { title, description, language, difficulty, estimatedHours } : Partial<Course> = await request.json();
+    const { title, description, language, difficulty, imageUrl } : Partial<Course> = await request.json();
 
-    if (!title || !description || !language || !difficulty || !estimatedHours) {
+    if (!title || !description || !language || !difficulty ) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // In a real application, you would save this to a database.
-    // For now, we'll just log it and return a success response.
-    console.log('New course created:', { title, description, language, difficulty, estimatedHours });
-    
     const newCourse: Course = {
       id: `new-course-${Date.now()}`,
       title,
       description,
       language,
       difficulty,
-      estimatedHours,
-      imageUrl: 'https://picsum.photos/600/400',
+      estimatedHours: 10, // Placeholder
+      imageUrl: imageUrl || 'https://picsum.photos/600/400',
       imageHint: 'abstract technology',
       modules: [],
       isPublished: false,
-      tags: [],
+      tags: [language],
       prerequisites: [],
       learningObjectives: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: 'admin-user', // Placeholder
     };
+
+    addCourse(newCourse);
 
     return NextResponse.json(newCourse, { status: 201 });
   } catch (error) {

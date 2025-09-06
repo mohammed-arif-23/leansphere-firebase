@@ -1,7 +1,9 @@
+
 'use server';
 
 import { NextResponse } from 'next/server';
 import type { Module } from '@/types';
+import { addModule } from '@/lib/data';
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
       content,
     };
     
-    console.log('New module created:', newModule);
+    addModule(newModule);
 
     return NextResponse.json(newModule, { status: 201 });
   } catch (error) {

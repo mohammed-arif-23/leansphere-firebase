@@ -145,6 +145,20 @@ const achievements: Achievement[] = [
     },
 ]
 
+// Since we're not using a database, we'll just modify the array in memory.
+// In a real app, these would be database operations.
+export const addCourse = (course: Course): void => {
+  courses.push(course);
+};
+
+export const addModule = (module: Module): void => {
+  const course = courses.find(c => c.id === module.courseId);
+  if (course) {
+    course.modules.push(module);
+  }
+};
+
+
 export const getCourses = (): Course[] => courses;
 export const getCourseById = (id: string): Course | undefined => courses.find(c => c.id === id);
 
