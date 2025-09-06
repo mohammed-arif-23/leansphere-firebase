@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { TextContent } from '@/components/course/TextContent';
 import { Separator } from '@/components/ui/separator';
+import { Quiz } from '@/components/course/Quiz';
 import { cn } from '@/lib/utils';
 
 export default function ModulePage({ params }: { params: { courseId: string, moduleId: string } }) {
@@ -42,6 +43,7 @@ export default function ModulePage({ params }: { params: { courseId: string, mod
         {module.type === 'video' && <VideoPlayer module={module} />}
         {module.type === 'text' && <TextContent module={module} />}
         {module.type === 'code' && <CodingAssignment module={module} course={course} />}
+        {module.type === 'quiz' && <Quiz module={module} />}
       </div>
 
       <Separator />
