@@ -1,31 +1,44 @@
-import { getCourses, getUserProgress, getAchievementsByStudentId } from '@/lib/data';
-import { CourseCard } from '@/components/dashboard/CourseCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookOpenCheck, Trophy, CheckCircle } from 'lucide-react';
-import { AchievementCard } from '@/components/dashboard/AchievementCard';
 import { Separator } from '@/components/ui/separator';
+import { CourseCard } from '@/components/dashboard/CourseCard';
+import { AchievementCard } from '@/components/dashboard/AchievementCard';
+import { BookOpenCheck, Trophy, CheckCircle } from 'lucide-react';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { verifyJWT } from '@/lib/auth';
+import { ensureMongooseConnection } from '@/lib/mongodb';
+import { CourseService, ProgressService, AchievementService } from '@/lib/services/database';
 
-export default function Dashboard() {
-  const courses = getCourses();
-  const userProgress = getUserProgress('student1');
-  const achievements = getAchievementsByStudentId('student1');
+export default async function Dashboard() {
+  const token = (await cookies()).get('auth_token')?.value;
+  if (!token) redirect('/login?redirect=/');
 
-  if (!userProgress) {
-    // Or handle this case more gracefully
-    return <div>Could not load user progress.</div>
+  let auth: any = null;
+  try {
+    auth = verifyJWT(token);
+  } catch {
+    redirect('/login?redirect=/');
   }
 
-  const completedModulesCount = userProgress.completedModules.length;
-  const totalModulesCount = courses.reduce((acc, course) => acc + course.modules.length, 0);
-  const overallCompletion = totalModulesCount > 0 ? (completedModulesCount / totalModulesCount) * 100 : 0;
+  await ensureMongooseConnection();
+  const [courseListRaw, progressListRaw, achievementsRaw] = await Promise.all([
+    CourseService.list({ isPublished: true }, { page: 1, limit: 50 }).then((r) => r.items),
+    ProgressService.getByStudent(auth.sub),
+    AchievementService.getForStudent(auth.sub),
+  ]);
+  // Deep-clone to plain JSON to strip ObjectId/Date prototypes
+  const courseList = JSON.parse(JSON.stringify(courseListRaw));
+  const progressList = JSON.parse(JSON.stringify(progressListRaw));
+  const achievements = JSON.parse(JSON.stringify(achievementsRaw));
 
+  const completedModulesCount = progressList.reduce((acc: number, p: any) => acc + (p.completedModules?.length || 0), 0);
+  const totalModulesCount = courseList?.reduce((acc: number, c: any) => acc + (c.modules?.length || 0), 0) || 0;
+  const overallCompletion = totalModulesCount > 0 ? (completedModulesCount / totalModulesCount) * 100 : 0;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Welcome back, Alex!
-        </h1>
+        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">Welcome back, {auth.name || auth.sub}!</h1>
         <p className="mt-2 text-lg text-muted-foreground">
           Continue your learning journey and explore new topics.
         </p>
@@ -41,7 +54,7 @@ export default function Dashboard() {
                         <BookOpenCheck className="w-4 h-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">2</div>
+                        <div className="text-2xl font-bold">{progressList.length}</div>
                         <p className="text-xs text-muted-foreground">
                            Keep up the great work!
                         </p>
@@ -79,8 +92,12 @@ export default function Dashboard() {
             <Separator className="mb-6"/>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {courses.map((course) => (
-                <CourseCard key={course.id} course={course} userProgress={userProgress} />
+              {courseList?.map((course: any) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  userProgress={{ completedModules: progressList.flatMap((p: any) => p.completedModules || []) } as any}
+                />
               ))}
             </div>
           </section>
@@ -94,7 +111,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                 {achievements.map((achievement) => (
+                 {achievements.map((achievement: any) => (
                    <AchievementCard key={achievement.id} achievement={achievement} />
                  ))}
               </div>

@@ -1,22 +1,18 @@
-'use server';
-
-import { getModuleById } from '@/lib/data';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { ok, notFound, serverError } from '@/lib/api';
+import { ModuleService } from '@/lib/services/database';
 
 export async function GET(
-  request: Request,
+  _request: NextRequest,
   { params }: { params: { moduleId: string } }
 ) {
-  // In a real app, you'd get the courseId from the context or URL
-  // For now, we find the module across all courses.
-  const module = getModuleById(params.moduleId);
-  
-  if (!module) {
-    return NextResponse.json({ error: 'Module not found' }, { status: 404 });
+  try {
+    const module = await ModuleService.getById(params.moduleId);
+    if (!module) return notFound('Module not found');
+    // TODO: prerequisite checking based on user's progress
+    const isUnlocked = true;
+    return ok({ module, isUnlocked });
+  } catch (e: any) {
+    return serverError('Failed to fetch module', e?.message);
   }
-
-  // Prerequisite checking would happen here
-  const isUnlocked = true; // Placeholder
-
-  return NextResponse.json({ module, isUnlocked });
 }

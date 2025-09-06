@@ -1,27 +1,28 @@
-'use server';
-
-import { getUserProgress, getAchievementsByStudentId } from '@/lib/data';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { ok, notFound, serverError } from '@/lib/api';
+import { ProgressService, AchievementService } from '@/lib/services/database';
 
 export async function GET(
-  request: Request,
+  _request: NextRequest,
   { params }: { params: { studentId: string } }
 ) {
-  const userProgress = getUserProgress(params.studentId);
-  const achievements = getAchievementsByStudentId(params.studentId);
-  
-  if (!userProgress) {
-    return NextResponse.json({ error: 'User progress not found' }, { status: 404 });
-  }
+  try {
+    // For MVP, fetch all progress docs for the student
+    const progress = await ProgressService.getByStudent(params.studentId);
+    if (!progress || progress.length === 0) return notFound('User progress not found');
 
-  // In a real app, you would calculate totalHoursSpent and completionRate
-  const response = {
-      courses: [], // Placeholder for course-specific progress
-      achievements,
-      totalHoursSpent: 18, // Placeholder
-      completionRate: 45, // Placeholder
-      ...userProgress,
-  }
+    // Achievements earned by this student
+    const achievements = await AchievementService.getForStudent(params.studentId);
 
-  return NextResponse.json(response);
+    // Basic aggregates (placeholder calculations)
+    const totalHoursSpent = progress.reduce((acc, p) => acc + (p.totalTimeSpent || 0), 0) / 60;
+    const completionRate = Math.round(
+      progress.reduce((acc, p) => acc + (p.completionPercentage || 0), 0) /
+        Math.max(1, progress.length)
+    );
+
+    return ok({ progress, achievements, totalHoursSpent, completionRate });
+  } catch (e: any) {
+    return serverError('Failed to fetch progress', e?.message);
+  }
 }

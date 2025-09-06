@@ -34,12 +34,31 @@ export default function AdminPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Redirect to login if not authenticated
+    (async () => {
+      try {
+        const me = await fetch('/api/admin/auth/me', { cache: 'no-store', credentials: 'include' });
+        if (!me.ok) {
+          window.location.href = '/admin/login?redirect=/admin';
+          return;
+        }
+        const j = await me.json();
+        if (!j?.success) {
+          window.location.href = '/admin/login?redirect=/admin';
+          return;
+        }
+      } catch {
+        window.location.href = '/admin/login?redirect=/admin';
+        return;
+      }
+    })();
+
     const fetchCourses = async () => {
       try {
-        const response = await fetch('/api/learning/courses');
+        const response = await fetch('/api/admin/courses?page=1&limit=100', { cache: 'no-store', credentials: 'include' });
         if (!response.ok) throw new Error('Failed to fetch courses');
         const data = await response.json();
-        setCourses(data.courses);
+        setCourses(Array.isArray(data?.data?.items) ? data.data.items : []);
       } catch (error) {
         toast({
           variant: 'destructive',
@@ -68,20 +87,41 @@ export default function AdminPage() {
     };
 
     try {
-      const response = await fetch('/api/learning/courses', {
+      const response = await fetch('/api/admin/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCourseData),
+        credentials: 'include',
+        body: JSON.stringify({
+          id: `course-${Date.now()}`,
+          title: newCourseData.title,
+          description: newCourseData.description,
+          language: (newCourseData.language as any) || 'General',
+          difficulty: (newCourseData.difficulty as any) || 'beginner',
+          estimatedHours: newCourseData.estimatedHours || 1,
+          imageUrl: newCourseData.imageUrl,
+          modules: [],
+          tags: [],
+          prerequisites: [],
+          learningObjectives: [],
+          isPublished: false,
+          isActive: true,
+          enrollmentCount: 0,
+          createdBy: 'admin-user',
+          instructors: [],
+          price: 0,
+          currency: 'USD',
+          isFree: true,
+        }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to create course');
       }
 
-      const createdCourse = await response.json();
+      const createdCourseResp = await response.json();
       toast({
         title: "Success!",
-        description: `Course "${createdCourse.title}" has been created.`,
+        description: `Course created.`,
       });
       // Reset form
       setCourseTitle('');
@@ -89,8 +129,12 @@ export default function AdminPage() {
       setCourseLanguage('');
       setCourseDifficulty('');
       setImageUrl('');
-      // Refresh course list
-      setCourses(prev => [...prev, createdCourse]);
+      // Refresh course list from admin API
+      try {
+        const refresh = await fetch('/api/admin/courses?page=1&limit=100', { cache: 'no-store', credentials: 'include' });
+        const refreshJson = await refresh.json();
+        setCourses(Array.isArray(refreshJson?.data?.items) ? refreshJson.data.items : []);
+      } catch {}
 
     } catch (error) {
       toast({
@@ -107,32 +151,50 @@ export default function AdminPage() {
     e.preventDefault();
     setIsSubmittingModule(true);
 
-    const newModuleData: Partial<Module> = {
-      courseId: selectedCourseId,
-      title: moduleTitle,
-      type: moduleType as Module['type'],
-      content: moduleContent,
-      // For quizzes, the content is a JSON string of questions.
-      // This is a simplified approach. A real app would have a better UI for this.
-      quiz: moduleType === 'quiz' ? JSON.parse(moduleContent) : undefined,
-    };
-
     try {
-      const response = await fetch('/api/learning/modules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newModuleData),
-      });
+      // Load the selected course
+      const getRes = await fetch(`/api/admin/courses/${encodeURIComponent(selectedCourseId)}`, { credentials: 'include', cache: 'no-store' });
+      if (!getRes.ok) throw new Error('Failed to load course');
+      const getJson = await getRes.json();
+      const course = getJson?.data?.course;
+      if (!course) throw new Error('Course not found');
 
-      if (!response.ok) {
-        throw new Error('Failed to create module');
+      const newModuleId = `m-${Date.now()}`;
+      // Build an initial content block from the simple form
+      const initialBlockId = `b-${Date.now()}`;
+      let contentBlock: any = { id: initialBlockId, title: moduleTitle, type: moduleType || 'text', order: 1, content: '', estimatedMinutes: 5 };
+      if (moduleType === 'video') {
+        contentBlock.videoUrl = moduleContent;
+      } else if (moduleType === 'code') {
+        contentBlock.content = moduleContent;
+        contentBlock.codeKind = 'illustrative';
+        contentBlock.codeLanguage = 'javascript';
+      } else if (moduleType === 'quiz') {
+        try { contentBlock.quiz = JSON.parse(moduleContent); } catch { contentBlock.quiz = { questions: [], passingScore: 0, allowRetakes: true }; }
+      } else {
+        contentBlock.content = moduleContent;
       }
 
-      const createdModule = await response.json();
-      toast({
-        title: "Success!",
-        description: `Module "${createdModule.title}" has been created.`,
+      const newModule: any = {
+        id: newModuleId,
+        title: moduleTitle,
+        description: '',
+        order: (course.modules?.length || 0) + 1,
+        estimatedHours: 1,
+        displayIndex: '',
+        contentBlocks: [contentBlock],
+      };
+
+      const updatedCourse = { ...course, modules: [...(course.modules || []), newModule] };
+      const putRes = await fetch(`/api/admin/courses/${encodeURIComponent(selectedCourseId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updatedCourse),
       });
+      if (!putRes.ok) throw new Error('Failed to save module');
+
+      toast({ title: 'Success!', description: `Module "${moduleTitle}" has been created.` });
       // Reset form
       setSelectedCourseId('');
       setModuleTitle('');
@@ -237,8 +299,8 @@ export default function AdminPage() {
                         <SelectValue placeholder="Select a course" />
                       </SelectTrigger>
                       <SelectContent>
-                        {courses.map(course => (
-                           <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                        {(courses || []).map(course => (
+                          <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
