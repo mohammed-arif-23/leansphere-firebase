@@ -19,6 +19,14 @@ const pythonModules: Module[] = [
   { id: 'p6', courseId: 'python-101', title: 'Your First Function', type: 'code', content: 'Write a Python function that takes two numbers and returns their sum.' },
 ];
 
+const javascriptModules: Module[] = [
+    { id: 'js1', courseId: 'javascript-101', title: 'Introduction to JavaScript', type: 'video', content: 'https://videos.cloudinary.com/demo' },
+    { id: 'js1.5', courseId: 'javascript-101', title: 'What is JavaScript?', type: 'text', content: 'JavaScript, often abbreviated as JS, is a programming language that is one of the core technologies of the World Wide Web, alongside HTML and CSS. As of 2023, 98.7% of websites use JavaScript on the client side for webpage behavior, often incorporating third-party libraries.' },
+    { id: 'js2', courseId: 'javascript-101', title: 'Variables and Data Types', type: 'code', content: 'Declare a variable using `let`, a constant using `const`, and a variable using `var`. Log all three to the console.' },
+    { id: 'js3', courseId: 'javascript-101', title: 'Arrow Functions', type: 'video', content: 'https://videos.cloudinary.com/demo' },
+    { id: 'js4', courseId: 'javascript-101', title: 'Array Methods', type: 'code', content: 'Create an array of numbers. Use the .map() method to create a new array where each number is doubled. Log the new array.' },
+];
+
 const courses: Course[] = [
   {
     id: 'java-101',
@@ -62,6 +70,28 @@ const courses: Course[] = [
     ],
     createdAt: '2023-02-15T12:00:00Z',
     updatedAt: '2023-02-15T12:00:00Z',
+    createdBy: 'admin-user',
+  },
+  {
+    id: 'javascript-101',
+    title: 'JavaScript for Web Devs',
+    language: 'JavaScript',
+    description: 'Learn the language of the web, from basic syntax to modern features.',
+    imageUrl: 'https://picsum.photos/600/400',
+    imageHint: 'web development',
+    modules: javascriptModules,
+    difficulty: 'beginner',
+    estimatedHours: 12,
+    isPublished: true,
+    tags: ['JavaScript', 'Web Development', 'Frontend'],
+    prerequisites: [],
+    learningObjectives: [
+        'Understand core JavaScript concepts',
+        'Manipulate the DOM',
+        'Learn about asynchronous programming'
+    ],
+    createdAt: '2023-04-10T16:00:00Z',
+    updatedAt: '2023-04-10T16:00:00Z',
     createdBy: 'admin-user',
   },
 ];

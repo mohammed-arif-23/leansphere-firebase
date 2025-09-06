@@ -145,7 +145,7 @@ export default function AdminPage() {
             </div>
             <div className="p-4 bg-background rounded-lg">
               <p className="text-sm text-muted-foreground">Total Courses</p>
-              <p className="text-2xl font-bold">2</p>
+              <p className="text-2xl font-bold">3</p>
             </div>
             <div className="p-4 bg-background rounded-lg">
               <p className="text-sm text-muted-foreground">Modules Completed</p>
