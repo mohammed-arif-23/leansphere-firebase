@@ -1,11 +1,19 @@
-export type ModuleType = 'video' | 'code' | 'text';
+export type ModuleType = 'video' | 'code' | 'text' | 'quiz';
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: { id: string; text: string }[];
+  correctOptionId: string;
+}
 
 export interface Module {
   id: string;
   courseId: string;
   title: string;
   type: ModuleType;
-  content: string; // For video, it's a URL. For code, it's a description/prompt. For text, it is markdown content.
+  content: string; // For video, it's a URL. For code, it's a prompt. For text, it is markdown.
+  quiz?: QuizQuestion[]; // For quiz modules
 }
 
 export interface Course {
@@ -30,6 +38,8 @@ export interface Course {
 export interface UserProgress {
   studentId: string;
   completedModules: string[];
+  lastLogin: string; // ISO Date string
+  streak: number;
 }
 
 export type AchievementType =

@@ -7,7 +7,38 @@ const javaModules: Module[] = [
   { id: 'j2', courseId: 'java-101', title: 'Variables and Data Types', type: 'code', content: 'Write a Java program that declares an integer, a double, and a string. Print all three to the console.' },
   { id: 'j3', courseId: 'java-101', title: 'Control Flow (If/Else)', type: 'video', content: 'https://videos.cloudinary.com/demo' },
   { id: 'j4', courseId: 'java-101', title: 'Loops (For/While)', type: 'code', content: 'Using a for loop, print numbers from 1 to 10. Then, do the same with a while loop.' },
-  { id: 'j5', courseId: 'java-101', title: 'Introduction to Objects', type: 'video', content: 'https://videos.cloudinary.com/demo' },
+  { 
+    id: 'j5', 
+    courseId: 'java-101', 
+    title: 'Java Knowledge Check', 
+    type: 'quiz', 
+    content: 'Test your knowledge of basic Java concepts.',
+    quiz: [
+      {
+        id: 'q1',
+        question: 'What is the correct syntax for the main method in Java?',
+        options: [
+          { id: 'o1', text: 'public static void main(String[] args)' },
+          { id: 'o2', text: 'public void main(String[] args)' },
+          { id: 'o3', text: 'static public void main(String[] args)' },
+          { id: 'o4', text: 'public static main(String[] args)' },
+        ],
+        correctOptionId: 'o1'
+      },
+      {
+        id: 'q2',
+        question: 'Which data type is used to create a variable that should store text?',
+        options: [
+          { id: 'o1', text: 'myString' },
+          { id: 'o2', text: 'string' },
+          { id: 'o3', text: 'Txt' },
+          { id: 'o4', text: 'String' },
+        ],
+        correctOptionId: 'o4'
+      }
+    ]
+  },
+  { id: 'j6', courseId: 'java-101', title: 'Introduction to Objects', type: 'video', content: 'https://videos.cloudinary.com/demo' },
 ];
 
 const pythonModules: Module[] = [
@@ -100,6 +131,8 @@ const courses: Course[] = [
 const userProgress: UserProgress = {
   studentId: 'student1',
   completedModules: ['j1', 'j2', 'p1'],
+  lastLogin: new Date().toISOString(),
+  streak: 3,
 };
 
 const achievements: Achievement[] = [
@@ -154,7 +187,18 @@ export const addCourse = (course: Course): void => {
 export const addModule = (module: Module): void => {
   const course = courses.find(c => c.id === module.courseId);
   if (course) {
-    course.modules.push(module);
+    // A real app would properly handle quiz JSON parsing and validation
+    const newModule = { ...module };
+    if (module.type === 'quiz' && typeof module.content === 'string') {
+        try {
+            newModule.quiz = JSON.parse(module.content);
+            newModule.content = 'Quiz module'; // Reset content for quiz type
+        } catch (e) {
+            console.error("Invalid JSON for quiz", e);
+            // handle error appropriately
+        }
+    }
+    course.modules.push(newModule);
   }
 };
 

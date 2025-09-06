@@ -7,7 +7,7 @@ import { addModule } from '@/lib/data';
 
 export async function POST(request: Request) {
   try {
-    const { courseId, title, type, content } : Partial<Module> = await request.json();
+    const { courseId, title, type, content, quiz } : Partial<Module> = await request.json();
 
     if (!courseId || !title || !type || !content) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       title,
       type,
       content,
+      quiz: type === 'quiz' ? quiz : undefined
     };
     
     addModule(newModule);

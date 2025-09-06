@@ -112,6 +112,9 @@ export default function AdminPage() {
       title: moduleTitle,
       type: moduleType as Module['type'],
       content: moduleContent,
+      // For quizzes, the content is a JSON string of questions.
+      // This is a simplified approach. A real app would have a better UI for this.
+      quiz: moduleType === 'quiz' ? JSON.parse(moduleContent) : undefined,
     };
 
     try {
@@ -254,6 +257,7 @@ export default function AdminPage() {
                         <SelectItem value="text">Text</SelectItem>
                         <SelectItem value="video">Video</SelectItem>
                         <SelectItem value="code">Code Assignment</SelectItem>
+                        <SelectItem value="quiz">Quiz</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -261,11 +265,14 @@ export default function AdminPage() {
                     <Label htmlFor="module-content">Content</Label>
                     <Textarea 
                       id="module-content" 
+                      rows={moduleType === 'quiz' ? 10 : 3}
                       placeholder={
                         moduleType === 'video' 
                           ? 'Enter video URL...' 
                           : moduleType === 'code'
                           ? 'Enter coding assignment prompt...'
+                          : moduleType === 'quiz'
+                          ? 'Enter quiz questions as a JSON array...'
                           : 'Enter markdown content...'
                       }
                       value={moduleContent} 
