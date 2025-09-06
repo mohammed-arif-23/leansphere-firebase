@@ -1,4 +1,4 @@
-import type { Course, UserProgress, Module } from '@/types';
+import type { Course, UserProgress, Module, Achievement } from '@/types';
 
 const javaModules: Module[] = [
   { id: 'j1', courseId: 'java-101', title: 'Introduction to Java', type: 'video', content: 'https://videos.cloudinary.com/demo' },
@@ -71,10 +71,32 @@ const userProgress: UserProgress = {
   completedModules: ['j1', 'j2', 'p1'],
 };
 
+const achievements: Achievement[] = [
+    {
+        id: 'ach-1',
+        studentId: 'student1',
+        type: 'first_submission',
+        title: 'First Code Submitted',
+        description: 'You submitted your first piece of code for grading!',
+        iconUrl: '/icons/first-submission.svg',
+        earnedAt: '2023-03-01T10:00:00Z',
+        relatedCourseId: 'java-101',
+    },
+    {
+        id: 'ach-2',
+        studentId: 'student1',
+        type: 'module_completion',
+        title: 'Java Basics Completed',
+        description: 'You completed the first module in the Java course.',
+        iconUrl: '/icons/module-completion.svg',
+        earnedAt: '2023-03-02T14:00:00Z',
+        relatedCourseId: 'java-101',
+    }
+]
+
 export const getCourses = (): Course[] => courses;
 export const getCourseById = (id: string): Course | undefined => courses.find(c => c.id === id);
 
-// Updated to find a module by its ID across all courses
 export const getModuleById = (moduleId: string): Module | undefined => {
   for (const course of courses) {
     const module = course.modules.find(m => m.id === moduleId);
@@ -85,4 +107,11 @@ export const getModuleById = (moduleId: string): Module | undefined => {
   return undefined;
 };
 
-export const getUserProgress = (studentId: string): UserProgress => userProgress;
+export const getUserProgress = (studentId: string): UserProgress | undefined => {
+    if (studentId === userProgress.studentId) return userProgress;
+    return undefined;
+};
+
+export const getAchievementsByStudentId = (studentId: string) : Achievement[] => {
+    return achievements.filter(a => a.studentId === studentId);
+}

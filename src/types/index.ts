@@ -16,18 +16,36 @@ export interface Course {
   imageUrl: string;
   imageHint: string;
   modules: Module[];
-  difficulty?: 'beginner' | 'intermediate' | 'advanced';
-  estimatedHours?: number;
-  isPublished?: boolean;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  tags?: string[];
-  prerequisites?: string[];
-  learningObjectives?: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  estimatedHours: number;
+  isPublished: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  tags: string[];
+  prerequisites: string[];
+  learningObjectives: string[];
 }
 
 export interface UserProgress {
   studentId: string;
   completedModules: string[];
+}
+
+export type AchievementType =
+  | "course_completion"
+  | "module_completion"
+  | "streak"
+  | "first_submission"
+  | "perfect_score";
+
+export interface Achievement {
+  id: string;
+  studentId: string;
+  type: AchievementType;
+  title: string;
+  description: string;
+  iconUrl: string;
+  earnedAt: string;
+  relatedCourseId?: string;
 }
