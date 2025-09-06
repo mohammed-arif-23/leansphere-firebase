@@ -22,7 +22,7 @@ const ExecuteCodeOutputSchema = z.object({
   success: z.boolean().describe('Whether the code executed successfully and met the criteria.'),
   output: z.string().describe('The stdout from the code execution.'),
   errors: z.string().optional().describe('Any errors from the code execution.'),
-  feedback: z.string().describe('A detailed explanation of the outcome.'),
+  feedback: z.string().describe('A detailed explanation of the outcome, explaining why the code is correct or incorrect based on the assignment.'),
   score: z.number().describe('A score from 0 to 100 representing the code\'s correctness.'),
 });
 export type ExecuteCodeOutput = z.infer<typeof ExecuteCodeOutputSchema>;
@@ -37,7 +37,9 @@ const prompt = ai.definePrompt({
   output: {schema: ExecuteCodeOutputSchema},
   prompt: `You are a code execution and grading engine. Evaluate the following code submission based on the assignment prompt. 
   
-Determine if the code is correct. Provide a score, feedback, and any output or errors.
+Execute the code and determine if it is correct. Provide a score, detailed feedback, and any output or errors.
+
+The feedback should explain *why* the code is correct or incorrect by comparing its output and logic to the assignment requirements.
 
 Assignment: {{{assignmentPrompt}}}
 Language: {{{language}}}
@@ -46,7 +48,7 @@ Code:
 {{{code}}}
 \'\'\'
 
-The score should be an integer between 0 and 100. The feedback should justify the score. The success flag should be true only if the score is above 70.`,
+The score should be an integer between 0 and 100. The success flag should be true only if the score is above 70.`,
 });
 
 const executeCodeFlow = ai.defineFlow(

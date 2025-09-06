@@ -40,7 +40,7 @@ Code:
 {{{code}}}
 \'\'\'
 
-Provide feedback on correctness, style, and efficiency. Suggest specific improvements.`,
+Provide feedback on correctness, style, and efficiency. Suggest specific improvements. Be encouraging and focus on helping the student learn.`,
 });
 
 const codeReviewFlow = ai.defineFlow(

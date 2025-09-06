@@ -31,7 +31,7 @@ const prompt = ai.definePrompt({
   name: 'smartHintPrompt',
   input: {schema: SmartHintInputSchema},
   output: {schema: SmartHintOutputSchema},
-  prompt: `You are an AI teaching assistant. A student is working on a coding problem and is stuck. Provide a small, helpful hint based on their current code and the assignment prompt. Do not give the full solution.
+  prompt: `You are an AI teaching assistant. A student is working on a coding problem and is stuck. Provide a small, helpful hint based on their current code and the assignment prompt. Do not give the full solution. Your hint should guide them to the next logical step.
 
 Assignment: {{{assignmentPrompt}}}
 Language: {{{programmingLanguage}}}

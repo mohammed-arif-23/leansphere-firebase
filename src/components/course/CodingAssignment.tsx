@@ -10,9 +10,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { generateStarterCode } from '@/ai/flows/generate-starter-code';
+import { getCodeReview } from '@/ai/flows/ai-code-review';
+import { getSmartHint } from '@/ai/flows/smart-hints';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { CheckCircle, Loader2, Sparkles, Terminal, XCircle, Play } from 'lucide-react';
+import { CheckCircle, Loader2, Sparkles, Terminal, XCircle, Lightbulb, Bot, TestTube2, MessageSquareQuote } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 
 interface CodingAssignmentProps {
@@ -27,6 +37,10 @@ const FormSchema = z.object({
 export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGettingHint, setIsGettingHint] = useState(false);
+  const [isGettingReview, setIsGettingReview] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [review, setReview] = useState<string | null>(null);
   const [submissionResult, setSubmissionResult] = useState<CodeExecutionResponse | null>(null);
   const { toast } = useToast();
 
@@ -59,6 +73,50 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
     }
   };
 
+  const handleGetHint = async () => {
+    setIsGettingHint(true);
+    setHint(null);
+    try {
+      const result = await getSmartHint({
+        code: form.getValues('code'),
+        assignmentPrompt: module.content,
+        programmingLanguage: course.language,
+      });
+      setHint(result.hint);
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to get a hint.',
+      });
+    } finally {
+      setIsGettingHint(false);
+    }
+  };
+  
+  const handleGetReview = async () => {
+    setIsGettingReview(true);
+    setReview(null);
+    try {
+      const result = await getCodeReview({
+        code: form.getValues('code'),
+        assignmentPrompt: module.content,
+        programmingLanguage: course.language,
+      });
+      setReview(result.review);
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to get code review.',
+      });
+    } finally {
+      setIsGettingReview(false);
+    }
+  };
+
   const onSubmit = async (data: z.infer<typeof FormSchema>) => {
     setIsSubmitting(true);
     setSubmissionResult(null);
@@ -70,7 +128,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
         body: JSON.stringify({
           code: data.code,
           language: course.language.toLowerCase(),
-          assignmentId: module.id,
+          assignmentPrompt: module.content,
         }),
       });
 
@@ -95,12 +153,41 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Code Editor */}
-      <Card className="bg-card/80 backdrop-blur-sm lg:col-span-2">
+    <div className="space-y-6">
+      <Card className="bg-card/80 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle>Coding Assignment</CardTitle>
-          <CardDescription>{module.content}</CardDescription>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle>Coding Assignment</CardTitle>
+              <CardDescription>{module.content}</CardDescription>
+            </div>
+             <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline"><MessageSquareQuote className="mr-2"/> AI Tutor</Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>AI Tutor</DialogTitle>
+                  <DialogDescription>
+                    Your personal AI assistant to help you learn.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                   <Button className="w-full justify-start" variant="ghost" onClick={handleGetHint} disabled={isGettingHint}>
+                      {isGettingHint ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Lightbulb className="mr-2 h-4 w-4"/>}
+                      Get a Hint
+                   </Button>
+                   {hint && <Alert><AlertTitle>Hint:</AlertTitle><AlertDescription>{hint}</AlertDescription></Alert>}
+
+                   <Button className="w-full justify-start" variant="ghost" onClick={handleGetReview} disabled={isGettingReview}>
+                     {isGettingReview ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Bot className="mr-2 h-4 w-4"/>}
+                      Get AI Code Review
+                   </Button>
+                   {review && <Alert variant="default"><AlertTitle>AI Review:</AlertTitle><AlertDescription>{review}</AlertDescription></Alert>}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -112,7 +199,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                   <FormItem>
                     <FormLabel className="text-lg">Your Solution ({course.language})</FormLabel>
                     <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 mt-2">
-                      <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b dark:border-gray-700">
+                       <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b dark:border-gray-700 flex justify-between items-center">
                           <div className="flex items-center space-x-2">
                             <div className="w-3 h-3 rounded-full bg-red-500" />
                             <div className="w-3 h-3 rounded-full bg-yellow-500" />
@@ -158,20 +245,19 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                 {isSubmitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Terminal className="mr-2 h-4 w-4" />
+                  <TestTube2 className="mr-2 h-4 w-4" />
                 )}
-                Run & Submit
+                Grade & Submit
               </Button>
             </CardFooter>
           </form>
         </Form>
       </Card>
 
-      {/* Output Panel */}
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 lg:col-span-2">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold">Output</h3>
+            <h3 className="font-semibold flex items-center"><Terminal className="mr-2 h-5 w-5"/> Execution Result</h3>
           </div>
         </div>
 
@@ -179,11 +265,11 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
           {isSubmitting ? (
              <div className="flex items-center space-x-2 text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Executing...</span>
+                <span>Executing and grading your code...</span>
               </div>
           ) : submissionResult ? (
             <div className="space-y-4">
-              <Alert variant={submissionResult.success ? 'default' : 'destructive'}>
+              <Alert variant={submissionResult.success ? 'default' : 'destructive'} className="border-l-4 border-l-current">
                 {submissionResult.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 <AlertTitle>{submissionResult.success ? 'Success!' : 'Needs Improvement'} (Score: {submissionResult.score})</AlertTitle>
                 <AlertDescription>
@@ -194,8 +280,8 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               {submissionResult.output && (
                 <div>
                   <h4 className="font-semibold text-foreground mb-2">Console Output:</h4>
-                  <pre className="bg-black text-green-400 p-3 rounded overflow-auto">
-                    {submissionResult.output}
+                  <pre className="bg-black text-green-400 p-3 rounded-md overflow-auto text-xs">
+                    <code>{submissionResult.output}</code>
                   </pre>
                 </div>
               )}
@@ -203,15 +289,15 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               {submissionResult.errors && (
                  <div>
                   <h4 className="font-semibold text-foreground mb-2">Errors:</h4>
-                  <pre className="bg-red-900/20 text-red-400 p-3 rounded overflow-auto">
-                    {submissionResult.errors}
+                  <pre className="bg-red-900/20 text-red-400 p-3 rounded-md overflow-auto text-xs">
+                    <code>{submissionResult.errors}</code>
                   </pre>
                 </div>
               )}
             </div>
           ) : (
             <div className="text-gray-500 italic">
-              Click "Run & Submit" to see the output...
+              Click "Grade & Submit" to see the result...
             </div>
           )}
         </div>
