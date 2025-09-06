@@ -28,6 +28,8 @@ const courses: Course[] = [
     imageUrl: 'https://picsum.photos/600/400',
     imageHint: 'abstract code',
     modules: javaModules,
+    difficulty: 'beginner',
+    estimatedHours: 10,
   },
   {
     id: 'python-101',
@@ -37,6 +39,8 @@ const courses: Course[] = [
     imageUrl: 'https://picsum.photos/600/400',
     imageHint: 'python snake',
     modules: pythonModules,
+    difficulty: 'beginner',
+    estimatedHours: 8,
   },
 ];
 

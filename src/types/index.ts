@@ -11,11 +11,20 @@ export interface Module {
 export interface Course {
   id: string;
   title: string;
-  language: 'Java' | 'Python';
+  language: 'Java' | 'Python' | 'JavaScript' | 'Other';
   description: string;
   imageUrl: string;
   imageHint: string;
   modules: Module[];
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  estimatedHours?: number;
+  isPublished?: boolean;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  tags?: string[];
+  prerequisites?: string[];
+  learningObjectives?: string[];
 }
 
 export interface UserProgress {
