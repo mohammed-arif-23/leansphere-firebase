@@ -1,5 +1,5 @@
 
-import type { Course, UserProgress, Module, Achievement } from '@/types';
+import type { Course, UserProgress, Module, Achievement, User } from '@/types';
 
 const javaModules: Module[] = [
   { id: 'j1', courseId: 'java-101', title: 'Introduction to Java', type: 'video', content: 'https://videos.cloudinary.com/demo' },
@@ -128,11 +128,21 @@ const courses: Course[] = [
   },
 ];
 
+const users: User[] = [
+  {
+    id: 'student1',
+    name: 'Alex',
+    email: 'alex@example.com',
+    avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+  },
+];
+
+
 const userProgress: UserProgress = {
   studentId: 'student1',
   completedModules: ['j1', 'j2', 'p1'],
   lastLogin: new Date().toISOString(),
-  streak: 3,
+  streak: 5,
 };
 
 const achievements: Achievement[] = [
@@ -215,6 +225,8 @@ export const getModuleById = (moduleId: string): Module | undefined => {
   }
   return undefined;
 };
+
+export const getUserById = (id: string): User | undefined => users.find(u => u.id === id);
 
 export const getUserProgress = (studentId: string): UserProgress | undefined => {
     if (studentId === userProgress.studentId) return userProgress;

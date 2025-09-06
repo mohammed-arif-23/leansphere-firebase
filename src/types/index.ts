@@ -35,6 +35,13 @@ export interface Course {
   learningObjectives: string[];
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string;
+}
+
 export interface UserProgress {
   studentId: string;
   completedModules: string[];
