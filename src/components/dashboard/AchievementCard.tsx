@@ -2,8 +2,10 @@
 'use client';
 
 import type { Achievement } from '@/types';
-import { Trophy, Code, BookOpen, Star } from 'lucide-react';
+import { Trophy, Code, BookOpen, Star, Share2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Button } from '../ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 interface AchievementCardProps {
   achievement: Achievement;
@@ -18,8 +20,38 @@ const iconMap: { [key in Achievement['type']]: React.ReactNode } = {
 }
 
 export function AchievementCard({ achievement }: AchievementCardProps) {
+  const { toast } = useToast();
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'Check out my new achievement!',
+      text: `I just earned the "${achievement.title}" badge on LearnSphere!`,
+      url: window.location.origin,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        console.error('Error sharing:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Could not share',
+          description: 'There was an error trying to share your achievement.',
+        })
+      }
+    } else {
+        // Fallback for browsers that don't support the Web Share API
+        navigator.clipboard.writeText(`${shareData.text} Check it out at ${shareData.url}`);
+        toast({
+            title: 'Link Copied!',
+            description: 'Your achievement details have been copied to your clipboard.',
+        });
+    }
+  };
+
   return (
-    <div className="flex items-start">
+    <div className="flex items-start w-full">
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold p-1.5">
             {iconMap[achievement.type]}
         </div>
@@ -30,6 +62,9 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
                 {formatDistanceToNow(new Date(achievement.earnedAt), { addSuffix: true })}
             </p>
         </div>
+        <Button variant="ghost" size="icon" className="ml-2 h-8 w-8" onClick={handleShare}>
+            <Share2 className="h-4 w-4" />
+        </Button>
     </div>
   );
 }
