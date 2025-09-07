@@ -19,7 +19,7 @@ export default function SignupPage() {
           <div className="flex justify-center mb-4">
              <GraduationCap className="h-12 w-12 text-accent" />
           </div>
-          <CardTitle className="text-2xl text-center">Join LearnSphere</CardTitle>
+          <CardTitle className="text-2xl text-center">Join dynamIT</CardTitle>
           <CardDescription className="text-center">
             Create an account to start your learning journey
           </CardDescription>

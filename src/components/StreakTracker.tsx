@@ -30,7 +30,7 @@ export default function StreakTracker() {
   }, []);
 
   const loadStreakData = () => {
-    const saved = localStorage.getItem('learnsphere_streak');
+    const saved = localStorage.getItem('dynamit_streak');
     if (saved) {
       try {
         const data = JSON.parse(saved);
@@ -45,7 +45,7 @@ export default function StreakTracker() {
           // Reset streak if more than 1 day gap
           const resetData = { ...data, currentStreak: 0 };
           setStreakData(resetData);
-          localStorage.setItem('learnsphere_streak', JSON.stringify(resetData));
+          localStorage.setItem('dynamit_streak', JSON.stringify(resetData));
         }
       } catch (error) {
         console.warn('Failed to load streak data:', error);
@@ -74,7 +74,7 @@ export default function StreakTracker() {
     };
 
     setStreakData(newData);
-    localStorage.setItem('learnsphere_streak', JSON.stringify(newData));
+    localStorage.setItem('dynamit_streak', JSON.stringify(newData));
 
     // Track streak milestone
     if (newStreak > 0 && newStreak % 7 === 0) {
@@ -100,7 +100,7 @@ export default function StreakTracker() {
   const setWeeklyGoal = (goal: number) => {
     const newData = { ...streakData, weeklyGoal: goal };
     setStreakData(newData);
-    localStorage.setItem('learnsphere_streak', JSON.stringify(newData));
+    localStorage.setItem('dynamit_streak', JSON.stringify(newData));
     setShowGoalSetter(false);
     
     track({
