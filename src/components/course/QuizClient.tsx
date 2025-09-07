@@ -32,6 +32,7 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
+  const [correctness, setCorrectness] = useState<Record<string, boolean>>({});
 
   const totalPoints = useMemo(() => {
     return (quiz.questions || []).reduce((acc, q) => acc + (q.points || 1), 0);
@@ -39,17 +40,29 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
 
   const onSubmit = async () => {
     let s = 0;
+    const corr: Record<string, boolean> = {};
     for (const q of quiz.questions || []) {
       const ans = (answers[q.id] || '').trim();
       if (q.type === 'multiple-choice' || q.type === 'true-false') {
-        if (q.correctOptionId && ans === q.correctOptionId) s += (q.points || 1);
+        if (q.correctOptionId && ans === q.correctOptionId) {
+          s += (q.points || 1);
+          corr[q.id] = true;
+        } else {
+          corr[q.id] = false;
+        }
       } else if (q.type === 'fill-blank') {
         // For now, treat correctOptionId as expected text (case-insensitive)
-        if (q.correctOptionId && ans.toLowerCase() === q.correctOptionId.toLowerCase()) s += (q.points || 1);
+        if (q.correctOptionId && ans.toLowerCase() === q.correctOptionId.toLowerCase()) {
+          s += (q.points || 1);
+          corr[q.id] = true;
+        } else {
+          corr[q.id] = false;
+        }
       }
     }
     setScore(s);
     setSubmitted(true);
+    setCorrectness(corr);
     const passed = s >= (quiz.passingScore || 0);
     if (passed && courseId && moduleId && contentBlockId) {
       try {
@@ -71,11 +84,20 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
       <CardContent className="space-y-4 p-4 sm:p-6">
         {(quiz.questions || []).map((q) => (
           <div key={q.id} className="space-y-2">
-            <div className="font-medium">{q.question}</div>
+            <div className="font-medium flex items-center gap-2">
+              <span>{q.question}</span>
+              {submitted && (
+                correctness[q.id] ? (
+                  <span className="text-green-600 text-xs">Correct</span>
+                ) : (
+                  <span className="text-red-600 text-xs">Incorrect</span>
+                )
+              )}
+            </div>
             {q.type !== 'fill-blank' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {(q.options || []).map((opt) => (
-                  <label key={opt.id} className="flex items-center gap-2 border rounded p-2 cursor-pointer">
+                  <label key={opt.id} className="flex items-center gap-2 border rounded p-2 cursor-pointer" aria-label={`Option ${opt.text}`}>
                     <input
                       type="radio"
                       className="h-4 w-4"
@@ -83,8 +105,10 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
                       checked={answers[q.id] === opt.id}
                       onChange={() => setAnswers((a) => ({ ...a, [q.id]: opt.id }))}
                       disabled={submitted}
+                      aria-checked={answers[q.id] === opt.id}
+                      aria-labelledby={`label-${q.id}-${opt.id}`}
                     />
-                    <span>{opt.text}</span>
+                    <span id={`label-${q.id}-${opt.id}`}>{opt.text}</span>
                   </label>
                 ))}
               </div>
@@ -96,8 +120,14 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
                   value={answers[q.id] || ''}
                   onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
                   disabled={submitted}
+                  aria-label="Enter your answer"
+                  aria-describedby={`answer-${q.id}`}
                 />
+                <div id={`answer-${q.id}`} className="text-sm text-muted-foreground mb-1">Type your answer and submit</div>
               </div>
+            )}
+            {submitted && !correctness[q.id] && q.correctOptionId && (
+              <div className="text-sm text-muted-foreground">Correct answer: {q.type === 'fill-blank' ? q.correctOptionId : (q.options || []).find(o => o.id === q.correctOptionId)?.text}</div>
             )}
             {submitted && q.explanation && (
               <div className="text-sm text-muted-foreground">Explanation: {q.explanation}</div>
@@ -107,13 +137,13 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
 
         {!submitted ? (
           <div className="flex justify-end">
-            <Button onClick={onSubmit} className="bg-accent text-accent-foreground hover:bg-accent/90">Submit</Button>
+            <Button onClick={onSubmit} aria-label="Submit quiz" className="bg-accent text-accent-foreground hover:bg-accent/90 focus:ring-accent focus:ring-2 focus:outline-none">Submit</Button>
           </div>
         ) : (
           <div className="space-y-2">
             <div className="text-sm">Score: {score} / {totalPoints} {score >= quiz.passingScore ? '✓ Passed' : '✗ Not Passed'}</div>
             {canRetake && (
-              <Button variant="outline" onClick={() => { setAnswers({}); setSubmitted(false); setScore(0); }}>Retake</Button>
+              <Button variant="outline" aria-label="Retake quiz" onClick={() => { setAnswers({}); setSubmitted(false); setScore(0); }}>Retake</Button>
             )}
           </div>
         )}

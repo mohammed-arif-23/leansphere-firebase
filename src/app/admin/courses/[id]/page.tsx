@@ -10,6 +10,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ArrowUp, ArrowDown, Copy, Trash2, Plus, MoreHorizontal } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import ProctorMonitor from '@/components/assessment/ProctorMonitor';
+import AdaptiveQuiz from '@/components/assessment/AdaptiveQuiz';
+import PlagiarismDetector from '@/components/assessment/PlagiarismDetector';
+import PeerReview from '@/components/assessment/PeerReview';
 // Markdown removed from admin UI
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then(r => r.json());
@@ -20,6 +30,7 @@ type Module = any;
 export default function AdminCourseEditorPage() {
   const params = useParams<{ id: string }>();
   const { data, isLoading, mutate } = useSWR(`/api/admin/courses/${encodeURIComponent(params.id)}`, fetcher);
+  const [validation, setValidation] = useState<{ checkedAt?: number; issues: string[]; items?: ValIssue[] }>({ issues: [] });
   const [course, setCourse] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
@@ -27,8 +38,214 @@ export default function AdminCourseEditorPage() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const collapsed = useRef<Record<string, boolean>>({});
+  const [collapseTick, setCollapseTick] = useState(0);
+  const isCollapsed = (k: string) => !!collapsed.current[k];
+  const setCollapsed = (k: string, v: boolean) => { collapsed.current[k] = v; setCollapseTick((x) => x + 1); };
+  const collapseAllCompositeItems = (courseObj: any, v: boolean) => {
+    (courseObj?.modules || []).forEach((m: any) => {
+      (m.contentBlocks || []).forEach((b: any) => {
+        if (b.type === 'composite') {
+          const items: any[] = Array.isArray(b.items) ? b.items : [];
+          items.forEach((it: any) => {
+            setCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`, v);
+            if (it?.kind === 'composite') {
+              const nested: any[] = Array.isArray(it.items) ? it.items : [];
+              nested.forEach((nit: any) => setCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`, v));
+            }
+          });
+        }
+      });
+    });
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && (e.key === '[' || e.key === ']')) {
+        e.preventDefault();
+        const expand = e.key === ']';
+        collapseAllCompositeItems(course, !expand);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);  
+  }, [course]);
   const saveTimer = useRef<any>(null);
   const ignoreNextAutoSave = useRef(false);
+  const [importMode, setImportMode] = useState<'replace' | 'merge'>('merge');
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+
+  type ValIssue = { message: string; severity: 'error' | 'warning' | 'info'; code: string; moduleId?: string; blockId?: string };
+  const buildValidation = (c: any): ValIssue[] => {
+    const out: ValIssue[] = [];
+    if (!c?.id) out.push({ message: 'Course id missing', severity: 'error', code: 'course.id.missing' });
+    const ids = new Set<string>();
+    const moduleIdSet = new Set<string>();
+    (c?.modules || []).forEach((m: any, mi: number) => {
+      if (!m.id) out.push({ message: `Module ${mi + 1} missing id`, severity: 'error', code: 'module.id.missing' });
+      if (m.id && ids.has(m.id)) out.push({ message: `Duplicate module id ${m.id}`, severity: 'error', code: 'module.id.duplicate', moduleId: m.id }); else if (m.id) { ids.add(m.id); moduleIdSet.add(m.id); }
+      if (typeof m.order !== 'number') out.push({ message: `Module ${m.title || m.id || `#${mi+1}`} missing order`, severity: 'warning', code: 'module.order.missing', moduleId: m.id });
+      const idxSet = new Set<string>();
+      (m.contentBlocks || []).forEach((b: any, bi: number) => {
+        if (!b.id) out.push({ message: `Block ${mi + 1}.${bi + 1} missing id`, severity: 'error', code: 'block.id.missing', moduleId: m.id });
+        if (b.id && ids.has(b.id)) out.push({ message: `Duplicate block id ${b.id}`, severity: 'error', code: 'block.id.duplicate', moduleId: m.id, blockId: b.id }); else if (b.id) ids.add(b.id);
+        if (typeof b.order !== 'number') out.push({ message: `Block ${b.title || b.id || `#${bi+1}`} missing order`, severity: 'warning', code: 'block.order.missing', moduleId: m.id, blockId: b.id });
+        if (!b.type) out.push({ message: `Block ${b.id || `#${bi+1}`} missing type`, severity: 'error', code: 'block.type.missing', moduleId: m.id, blockId: b.id });
+        if (b.type === 'video' && !b.videoUrl) out.push({ message: `Video block ${b.id || `#${bi+1}`} missing videoUrl`, severity: 'error', code: 'block.video.url.missing', moduleId: m.id, blockId: b.id });
+        if (b.type === 'quiz' && !b.quiz) out.push({ message: `Quiz block ${b.id || `#${bi+1}`} missing quiz data`, severity: 'error', code: 'block.quiz.data.missing', moduleId: m.id, blockId: b.id });
+        if (b.type === 'quiz' && b.quiz) {
+          const qz = b.quiz || {};
+          const qs = Array.isArray(qz.questions) ? qz.questions : [];
+          if (qs.length === 0) {
+            out.push({ message: `Quiz has no questions`, severity: 'warning', code: 'quiz.questions.empty', moduleId: m.id, blockId: b.id });
+          }
+          qs.forEach((q: any, qi: number) => {
+            if (!q || !String(q.text || '').trim()) {
+              out.push({ message: `Quiz question #${qi + 1} text is empty`, severity: 'warning', code: 'quiz.question.text.empty', moduleId: m.id, blockId: b.id });
+            }
+            const opts = Array.isArray(q.options) ? q.options : [];
+            if (opts.length < 2) {
+              out.push({ message: `Quiz question #${qi + 1} must have at least 2 options`, severity: 'warning', code: 'quiz.question.options.min', moduleId: m.id, blockId: b.id });
+            }
+            opts.forEach((op: any, oi: number) => {
+              if (!String(op || '').trim()) {
+                out.push({ message: `Quiz question #${qi + 1} option #${oi + 1} is empty`, severity: 'warning', code: 'quiz.question.option.empty', moduleId: m.id, blockId: b.id });
+              }
+            });
+            const ci = Number(q.correctIndex);
+            if (!(ci >= 0 && ci < opts.length)) {
+              out.push({ message: `Quiz question #${qi + 1} has invalid correct option index`, severity: 'warning', code: 'quiz.question.correct.invalid', moduleId: m.id, blockId: b.id });
+            }
+          });
+        }
+        if (b.type === 'assignment') {
+          // Points must be >= 0
+          if (b.assignmentPoints !== undefined && Number(b.assignmentPoints) < 0) {
+            out.push({ message: `Assignment has negative points`, severity: 'error', code: 'assignment.points.invalid', moduleId: m.id, blockId: b.id });
+          }
+          // Test cases must have both input and expectedOutput if present
+          (Array.isArray(b.testCases) ? b.testCases : []).forEach((tc: any, ti: number) => {
+            if (!tc || !String(tc.input || '').trim() || !String(tc.expectedOutput || '').trim()) {
+              out.push({ message: `Assignment test case #${ti+1} must include input and expected output`, severity: 'warning', code: 'assignment.testcase.incomplete', moduleId: m.id, blockId: b.id });
+            }
+          });
+          // Attachments must have non-empty URL
+          (Array.isArray(b.attachments) ? b.attachments : []).forEach((at: any, ai: number) => {
+            if (!at || !String(at.url || '').trim()) {
+              out.push({ message: `Assignment attachment #${ai+1} missing URL`, severity: 'warning', code: 'assignment.attachment.url.missing', moduleId: m.id, blockId: b.id });
+            }
+          });
+          // Rubric items must have positive maxPoints and weight
+          (Array.isArray(b.rubric) ? b.rubric : []).forEach((rc: any, ri: number) => {
+            if (rc && (Number(rc.maxPoints) <= 0 || Number(rc.weight) <= 0)) {
+              out.push({ message: `Rubric item #${ri+1} must have positive maxPoints and weight`, severity: 'warning', code: 'assignment.rubric.invalid', moduleId: m.id, blockId: b.id });
+            }
+          });
+          // Totals check: compare assignmentPoints vs rubric totals
+          if (typeof b.assignmentPoints === 'number' && Array.isArray(b.rubric) && b.rubric.length > 0) {
+            const sumMax = b.rubric.reduce((acc: number, rc: any) => acc + (Number(rc?.maxPoints) || 0), 0);
+            const sumWeighted = b.rubric.reduce((acc: number, rc: any) => acc + (Number(rc?.maxPoints) || 0) * (Number(rc?.weight) || 0), 0);
+            const pts = Number(b.assignmentPoints) || 0;
+            // If points don't match either common scheme, warn
+            if (pts !== sumMax && pts !== sumWeighted) {
+              out.push({
+                message: `Assignment points (${pts}) do not match rubric totals (max=${sumMax}${sumWeighted !== sumMax ? `, weighted=${sumWeighted}` : ''}).`,
+                severity: 'warning',
+                code: 'assignment.rubric.totals.mismatch',
+                moduleId: m.id,
+                blockId: b.id,
+              });
+            }
+          }
+        }
+        if (b.displayIndex) {
+          if (idxSet.has(b.displayIndex)) out.push({ message: `Duplicate block displayIndex ${b.displayIndex} in module ${m.title || m.id}` , severity: 'warning', code: 'block.displayIndex.duplicate', moduleId: m.id, blockId: b.id }); else idxSet.add(b.displayIndex);
+        }
+      });
+    });
+    (c?.modules || []).forEach((m: any) => {
+      (m.prerequisites || []).forEach((pid: string) => {
+        if (!moduleIdSet.has(pid)) out.push({ message: `Module ${m.title || m.id} has orphan prerequisite ${pid}`, severity: 'warning', code: 'module.prereq.orphan', moduleId: m.id });
+      });
+    });
+    return out;
+  };
+
+  // Merge incoming course JSON into current course
+  const mergeCourses = (curr: any, incoming: any) => {
+    if (!curr) return structuredClone(incoming);
+    const topFields = ['title','description','language','difficulty','tags','imageUrl','imageHint','thumbnailUrl','learningObjectives','isPublished','isActive','isFree','prerequisites'];
+    const out: any = { ...curr };
+    topFields.forEach((k) => {
+      if (incoming[k] !== undefined) out[k] = structuredClone(incoming[k]);
+    });
+    const currMods: any[] = Array.isArray(curr.modules) ? structuredClone(curr.modules) : [];
+    const incomingMods: any[] = Array.isArray(incoming.modules) ? structuredClone(incoming.modules) : [];
+    const map = new Map(currMods.map((m: any) => [m.id, m]));
+    for (const im of incomingMods) {
+      if (!im?.id) continue;
+      if (map.has(im.id)) {
+        const cm = map.get(im.id);
+        // merge module fields
+        const modFields = ['title','description','order','displayIndex','estimatedHours','isLocked','sequentialRequired','learningObjectives','tags','prerequisites'];
+        modFields.forEach((k) => { if (im[k] !== undefined) cm[k] = structuredClone(im[k]); });
+        // merge content blocks by id
+        const cbMap: Map<string, any> = new Map((cm.contentBlocks || []).map((b: any) => [String(b.id), b as any]));
+        for (const ib of (im.contentBlocks || [])) {
+          if (!ib?.id) continue;
+          if (cbMap.has(String(ib.id))) {
+            const cb: any = cbMap.get(String(ib.id));
+            const bFields = ['displayIndex','type','title','content','order','estimatedMinutes','videoUrl','videoDuration','requiredPercent','codeLanguage','codeTemplate','codeContent','codeKind','timeLimitMs','memoryLimitMb','testCases','bullets','bulletsMarkdown','imageUrl','alt','caption','isRequired','quiz','items'];
+            bFields.forEach((k) => { if (ib[k] !== undefined) cb[k] = structuredClone(ib[k]); });
+          } else {
+            cbMap.set(String(ib.id), structuredClone(ib));
+          }
+        }
+        cm.contentBlocks = Array.from(cbMap.values());
+      } else {
+        map.set(im.id, structuredClone(im));
+      }
+    }
+    out.modules = Array.from(map.values());
+    return out;
+  };
+
+  // Auto-fix a subset of issues safely
+  const applyAutoFixes = () => {
+    setCourse((c: any) => {
+      if (!c) return c;
+      // 1) Ensure module ids and orders
+      const mods = [...(c.modules || [])]
+        .map((m: any, mi: number) => ({
+          ...m,
+          id: m.id || `m-${Date.now()}-${mi}`,
+        }))
+        .sort((a, b) => (typeof a.order === 'number' && typeof b.order === 'number') ? a.order - b.order : 0)
+        .map((m: any, mi: number) => ({
+          ...m,
+          order: typeof m.order === 'number' ? m.order : mi + 1,
+          contentBlocks: [...(m.contentBlocks || [])]
+            .map((b: any, bi: number) => ({ ...b, id: b.id || `b-${Date.now()}-${mi}-${bi}` }))
+            .sort((a: any, b: any) => (typeof a.order === 'number' && typeof b.order === 'number') ? a.order - b.order : 0)
+            .map((b: any, bi: number, arr: any[]) => ({
+              ...b,
+              order: typeof b.order === 'number' ? b.order : bi + 1,
+              // clear duplicate displayIndex (will be regenerated by Auto Index if needed)
+              displayIndex: b.displayIndex || '',
+            })),
+        }));
+      // 2) Drop orphan prerequisites
+      const idSet = new Set(mods.map((m: any) => m.id));
+      const fixedMods = mods.map((m: any) => ({
+        ...m,
+        prerequisites: (m.prerequisites || []).filter((pid: string) => idSet.has(pid)),
+      }));
+      return { ...c, modules: fixedMods };
+    });
+    // Re-run validation after the state update (small timeout)
+    setTimeout(() => {
+      setValidation((v) => ({ checkedAt: Date.now(), issues: buildValidation(course).map(i => i.message) }));
+    }, 0);
+  };
 
   useEffect(() => {
     if (data?.success && data?.data?.course) setCourse(structuredClone(data.data.course));
@@ -194,7 +411,6 @@ export default function AdminCourseEditorPage() {
       const newId = `m-${Date.now()}`;
       const cloneBlocks = (orig.contentBlocks || []).map((b: any, i: number) => ({ ...structuredClone(b), id: `b-${Date.now()}-${i}`, order: i + 1 }));
       const dupe = { ...structuredClone(orig), id: newId, title: `${orig.title} (Copy)`, order: idx + 2, contentBlocks: cloneBlocks };
-      // Insert after
       const head = mods.slice(0, idx + 1);
       const tail = mods.slice(idx + 1);
       const next = [...head, dupe, ...tail].map((m, i2) => ({ ...m, order: i2 + 1 }));
@@ -227,6 +443,35 @@ export default function AdminCourseEditorPage() {
     }));
   };
 
+  const insertBlockAt = (mid: string, index: number, type: string) => {
+    setCourse((c: any) => ({
+      ...c,
+      modules: (c.modules || []).map((m: any) => {
+        if (m.id !== mid) return m;
+        const blocks = [...(m.contentBlocks || [])].sort((a: any, b: any) => a.order - b.order);
+        const newBlock: any = {
+          id: `b-${Date.now()}`,
+          title: type === 'text' ? 'Text' : type === 'bullets' ? 'Bullet List' : type === 'image' ? 'Image' : type === 'code' ? 'Code Snippet' : type === 'video' ? 'Video' : type === 'quiz' ? 'Quiz' : type === 'assignment' ? 'Assignment' : type === 'composite' ? 'Composite' : type,
+          type,
+          displayIndex: '',
+          estimatedMinutes: 5,
+          ...(type === 'text' ? { content: '' } : {}),
+          ...(type === 'bullets' ? { bullets: [] } : {}),
+          ...(type === 'image' ? { imageUrl: '', alt: '', caption: '' } : {}),
+          ...(type === 'code' ? { codeLanguage: 'javascript', codeTemplate: '', codeContent: '' } : {}),
+          ...(type === 'assignment' ? { content: 'Complete the coding assignment below:', codeLanguage: 'javascript', codeContent: '// Write your solution here\n', codeKind: 'assignment', testCases: [] } : {}),
+          ...(type === 'quiz' ? { quiz: { questions: [], passingScore: 70, allowRetakes: true, timeLimit: null } } : {}),
+          ...(type === 'composite' ? { items: [] } : {}),
+        };
+        const clamped = Math.max(0, Math.min(index, blocks.length));
+        blocks.splice(clamped, 0, newBlock);
+        // reassign orders
+        const withOrder = blocks.map((b: any, i: number) => ({ ...b, order: i + 1 }));
+        return { ...m, contentBlocks: withOrder };
+      }),
+    }));
+  };
+
   const addBlockOfType = (mid: string, type: string) => {
     setCourse((c: any) => ({
       ...c,
@@ -234,15 +479,40 @@ export default function AdminCourseEditorPage() {
         ...m,
         contentBlocks: [...(m.contentBlocks || []), {
           id: `b-${Date.now()}`,
-          title: type === 'text' ? 'Text' : type === 'bullets' ? 'Bullet List' : type === 'image' ? 'Image' : type === 'code' ? 'Code Snippet' : type,
+          title: type === 'text' ? 'Text' : 
+                 type === 'bullets' ? 'Bullet List' : 
+                 type === 'image' ? 'Image' : 
+                 type === 'code' ? 'Code Snippet' : 
+                 type === 'quiz' ? 'Quiz' :
+                 type === 'assignment' ? 'Code Assignment' :
+                 type === 'video' ? 'Video' :
+                 type === 'composite' ? 'Composite' : type,
           type,
           order: (m.contentBlocks?.length || 0) + 1,
           displayIndex: '',
           estimatedMinutes: 5,
+          isRequired: type === 'quiz' || type === 'assignment', // Auto-mark quiz and assignments as required
           ...(type === 'text' ? { content: '' } : {}),
           ...(type === 'bullets' ? { bullets: [] } : {}),
           ...(type === 'image' ? { imageUrl: '', alt: '', caption: '' } : {}),
+          ...(type === 'video' ? { videoUrl: '' } : {}),
           ...(type === 'code' ? { codeLanguage: 'javascript', codeTemplate: '', codeContent: '' } : {}),
+          ...(type === 'quiz' ? { 
+            quiz: { 
+              questions: [], 
+              passingScore: 70, 
+              allowRetakes: true,
+              timeLimit: null 
+            } 
+          } : {}),
+          ...(type === 'assignment' ? { 
+            content: 'Complete the coding assignment below:', 
+            codeLanguage: 'javascript', 
+            codeContent: '// Write your solution here\n',
+            codeKind: 'assignment',
+            testCases: []
+          } : {}),
+          ...(type === 'composite' ? { items: [] } : {}),
         }],
       } : m)),
     }));
@@ -305,16 +575,186 @@ export default function AdminCourseEditorPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-      <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 bg-white/80 backdrop-blur border-b">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl font-semibold">Edit Course</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={autoGenerateIndices}>Auto Index</Button>
-            <Button size="sm" onClick={onSave} className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+      <div className="glass-card mb-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="text-2xl font-semibold">Edit Course</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => {
+              setCourse((c: any) => {
+                const mods = [...(c.modules || [])].sort((a, b) => a.order - b.order);
+                const updated = mods.map((m: any, idx: number) => ({
+                  ...m,
+                  prerequisites: mods.slice(0, idx).map((x: any) => x.id),
+                }));
+                return { ...c, modules: updated };
+              });
+            }}>Set prerequisites sequentially</Button>
+            <Button variant="outline" onClick={() => {
+              // Clear prerequisites on all modules
+              setCourse((c: any) => ({
+                ...c,
+                modules: (c.modules || []).map((m: any) => ({ ...m, prerequisites: [] })),
+              }));
+            }}>Clear all prerequisites</Button>
+            <Button variant="outline" onClick={() => {
+              // Auto mark required for quiz and code exam blocks across all modules
+              setCourse((c: any) => ({
+                ...c,
+                modules: (c.modules || []).map((m: any) => ({
+                  ...m,
+                  contentBlocks: (m.contentBlocks || []).map((b: any) => ({
+                    ...b,
+                    isRequired: !!b.isRequired || b.type === 'quiz' || (b.type === 'code' && (b.codeKind === 'exam')),
+                  })),
+                })),
+              }));
+            }}>Auto-mark required</Button>
+            <Button variant="outline" onClick={() => {
+              // Normalize IDs & Orders across modules and blocks
+              setCourse((c: any) => {
+                const mods = [...(c.modules || [])]
+                  .sort((a, b) => a.order - b.order)
+                  .map((m: any, mi: number) => ({
+                    ...m,
+                    id: m.id || `m-${Date.now()}-${mi}`,
+                    order: mi + 1,
+                    displayIndex: m.displayIndex || '',
+                    contentBlocks: [...(m.contentBlocks || [])]
+                      .sort((a: any, b: any) => a.order - b.order)
+                      .map((b: any, bi: number) => ({
+                        ...b,
+                        id: b.id || `b-${Date.now()}-${mi}-${bi}`,
+                        order: bi + 1,
+                        displayIndex: b.displayIndex || '',
+                      })),
+                  }));
+                return { ...c, modules: mods };
+              });
+            }}>Normalize IDs & Orders</Button>
+            <Button variant="outline" onClick={autoGenerateIndices}>Auto Index</Button>
+            <Button variant="outline" onClick={() => {
+              // Validate course and show inline panel
+              const full = buildValidation(course);
+              setValidation({ checkedAt: Date.now(), issues: full.map(i => `${i.severity.toUpperCase()}: ${i.message}`), items: full });
+            }}>Validate Course</Button>
+            <Button variant="admin" onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">{lastSavedAt ? `Last saved ${new Date(lastSavedAt).toLocaleTimeString()}` : 'Not yet saved'} • Auto-save {autoSaveEnabled ? 'On' : 'Off'}</div>
       </div>
+
+      {/* Inline validation panel */}
+      {validation.checkedAt !== undefined && (
+        <Card className="rounded-xl border-amber-300/60">
+          <CardHeader>
+            <CardTitle>Validation {validation.issues.length === 0 ? 'Passed' : 'Issues'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {validation.issues.length === 0 ? (
+              <div className="text-sm text-green-700">No issues found.</div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-red-700">Found {validation.issues.length} issue(s):</div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={applyAutoFixes}>Auto-fix common issues</Button>
+                    <Button size="sm" variant="outline" onClick={autoGenerateIndices}>Auto Index</Button>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      // Re-run validation only
+                      const full = buildValidation(course);
+                      setValidation({ checkedAt: Date.now(), issues: full.map(i => `${i.severity.toUpperCase()}: ${i.message}`), items: full });
+                    }}>Re-validate</Button>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">Import Mode</Label>
+                      <Select value={importMode} onValueChange={(v) => setImportMode(v as any)}>
+                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="merge">Merge</SelectItem>
+                          <SelectItem value="replace">Replace</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      // Export validation report as JSON
+                      const payload = {
+                        generatedAt: new Date().toISOString(),
+                        courseId: course?.id,
+                        issueCount: validation.items?.length || 0,
+                        issues: (validation.items || []).map(i => ({
+                          severity: i.severity,
+                          message: i.message,
+                          code: i.code,
+                          moduleId: i.moduleId,
+                          blockId: i.blockId,
+                        })),
+                      };
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${course?.id || 'course'}-validation-report.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}>Export Report</Button>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        accept="application/json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            try {
+                              const json = JSON.parse(String(reader.result) || '{}');
+                              if (!json || typeof json !== 'object') throw new Error('Invalid JSON');
+                              // Support both report payload (payload.courseId, issues) and direct course JSON
+                              const maybeCourse = json.course || json.data?.course || (json.modules && json.title ? json : null);
+                              if (maybeCourse) {
+                                setCourse((prev: any) => importMode === 'merge' ? mergeCourses(prev, maybeCourse) : structuredClone(maybeCourse));
+                                ignoreNextAutoSave.current = true;
+                              } else {
+                                // Not a course object; if it looks like a validation payload, just load issues
+                                if (Array.isArray(json.issues)) {
+                                  const items = (json.issues || []).map((i: any) => ({
+                                    severity: i.severity || 'info',
+                                    message: i.message || String(i),
+                                    code: i.code || 'imported',
+                                    moduleId: i.moduleId,
+                                    blockId: i.blockId,
+                                  })) as ValIssue[];
+                                  setValidation({ checkedAt: Date.now(), issues: items.map(i => `${i.severity.toUpperCase()}: ${i.message}`), items });
+                                }
+                              }
+                            } catch {}
+                          };
+                          reader.readAsText(file);
+                          // reset input to allow same-file re-import
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      <Button size="sm" variant="outline">Import Course JSON</Button>
+                    </label>
+                  </div>
+                </div>
+                <ul className="ml-1 space-y-1 text-sm">
+                  {validation.issues.map((msg, i) => {
+                    const sev = msg.startsWith('ERROR') ? 'error' : msg.startsWith('WARNING') ? 'warning' : 'info';
+                    const color = sev === 'error' ? 'text-red-700' : sev === 'warning' ? 'text-amber-700' : 'text-slate-700';
+                    return (
+                      <li key={i} className={`pl-2 border-l-4 ${sev === 'error' ? 'border-red-400' : sev === 'warning' ? 'border-amber-400' : 'border-slate-400'}`}>
+                        <span className={`font-medium mr-2 uppercase ${color}`}>{sev}</span>
+                        <span>{msg.replace(/^(ERROR|WARNING|INFO):\s*/, '')}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -324,6 +764,19 @@ export default function AdminCourseEditorPage() {
               <div>
                 <Label>Title</Label>
                 <Input value={course.title} onChange={(e) => setCourse({ ...course, title: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                <div className="flex items-center gap-2">
+                  <Switch checked={!!course.isPublished} onCheckedChange={(v) => setCourse({ ...course, isPublished: !!v })} />
+                  <Label className="cursor-pointer" onClick={() => setCourse({ ...course, isPublished: !course.isPublished })}>Published</Label>
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Tags (comma separated)</Label>
+                  <Input value={(course.tags || []).join(', ')} onChange={(e) => {
+                    const arr = (e.target.value || '').split(',').map(s => s.trim()).filter(Boolean);
+                    setCourse({ ...course, tags: arr });
+                  }} placeholder="html, css, beginner" />
+                </div>
               </div>
               <div>
                 <Label>Description</Label>
@@ -353,9 +806,23 @@ export default function AdminCourseEditorPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* ETA removed per request */}
+              </div>
+              <Separator />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Estimated Hours</Label>
-                  <Input type="number" value={course.estimatedHours} onChange={(e) => setCourse({ ...course, estimatedHours: Number(e.target.value) })} />
+                  <Label>Hero Image URL</Label>
+                  <Input value={course.imageUrl || ''} onChange={(e) => setCourse({ ...course, imageUrl: e.target.value })} placeholder="https://..." />
+                  {course.imageUrl && (
+                    <div className="mt-2"><img src={course.imageUrl} alt="Hero" className="w-full max-h-48 object-cover rounded" /></div>
+                  )}
+                </div>
+                <div>
+                  <Label>Thumbnail URL</Label>
+                  <Input value={course.thumbnailUrl || ''} onChange={(e) => setCourse({ ...course, thumbnailUrl: e.target.value })} placeholder="https://..." />
+                  {course.thumbnailUrl && (
+                    <div className="mt-2"><img src={course.thumbnailUrl} alt="Thumbnail" className="h-24 w-24 object-cover rounded" /></div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -364,8 +831,68 @@ export default function AdminCourseEditorPage() {
           {/* Modules Editor */}
 
           {/* Quick controls */}
-          <Card className="rounded-xl shadow-sm">
-            <CardHeader><CardTitle>Editor Tools</CardTitle></CardHeader>
+          <Card className="rounded-xl glass-card shadow-soft">
+            <CardHeader className="py-3 flex flex-row items-center justify-between">
+              <CardTitle>Editor Tools</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" onClick={() => {
+                  setCourse((c: any) => {
+                    const mods = [...(c.modules || [])].sort((a, b) => a.order - b.order);
+                    const updated = mods.map((m: any, idx: number) => ({
+                      ...m,
+                      prerequisites: mods.slice(0, idx).map((x: any) => x.id),
+                    }));
+                    return { ...c, modules: updated };
+                  });
+                }}>Set prerequisites sequentially</Button>
+                <Button variant="outline" onClick={() => {
+                  setCourse((c: any) => ({
+                    ...c,
+                    modules: (c.modules || []).map((m: any) => ({ ...m, prerequisites: [] })),
+                  }));
+                }}>Clear all prerequisites</Button>
+                <Button variant="outline" onClick={() => {
+                  setCourse((c: any) => ({
+                    ...c,
+                    modules: (c.modules || []).map((m: any) => ({
+                      ...m,
+                      contentBlocks: (m.contentBlocks || []).map((b: any) => ({
+                        ...b,
+                        isRequired: !!b.isRequired || b.type === 'quiz' || (b.type === 'code' && (b.codeKind === 'exam')),
+                      })),
+                    })),
+                  }));
+                }}>Auto-mark required</Button>
+                <Button variant="outline" onClick={() => {
+                  setCourse((c: any) => {
+                    const mods = [...(c.modules || [])]
+                      .sort((a, b) => a.order - b.order)
+                      .map((m: any, mi: number) => ({
+                        ...m,
+                        id: m.id || `m-${Date.now()}-${mi}`,
+                        order: mi + 1,
+                        displayIndex: m.displayIndex || '',
+                        contentBlocks: [...(m.contentBlocks || [])]
+                          .sort((a: any, b: any) => a.order - b.order)
+                          .map((b: any, bi: number) => ({
+                            ...b,
+                            id: b.id || `b-${Date.now()}-${mi}-${bi}`,
+                            order: bi + 1,
+                            displayIndex: b.displayIndex || '',
+                          })),
+                      }));
+                    return { ...c, modules: mods };
+                  });
+                }}>Normalize IDs & Orders</Button>
+                <Button variant="outline" onClick={autoGenerateIndices}>Auto Index</Button>
+                <Button variant="outline" onClick={() => {
+                  // Validate course and show inline panel
+                  const full = buildValidation(course);
+                  setValidation({ checkedAt: Date.now(), issues: full.map(i => `${i.severity.toUpperCase()}: ${i.message}`), items: full });
+                }}>Validate Course</Button>
+                <Button variant="admin" onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+              </div>
+            </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -387,7 +914,10 @@ export default function AdminCourseEditorPage() {
           </Card>
 
         <Card className="rounded-xl shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Modules</CardTitle><Button onClick={addModule} size="sm">Add Module</Button></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Modules</CardTitle>
+            <Button onClick={addModule} size="sm" variant="admin">Add Module</Button>
+          </CardHeader>
           <CardContent className="space-y-4">
             {(course.modules || [])
               .sort((a: any, b: any) => a.order - b.order)
@@ -401,828 +931,1136 @@ export default function AdminCourseEditorPage() {
                 );
               })
               .map((m: any, i: number, arr: any[]) => (
-              <div key={m.id} className="border rounded-xl p-4 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="font-medium">{m.displayIndex ? `${m.displayIndex} ` : ''}{m.title}</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button variant="outline" size="sm" onClick={() => { collapsed.current[m.id] = !collapsed.current[m.id]; setCourse({ ...course }); }}>{collapsed.current[m.id] ? 'Expand' : 'Collapse'}</Button>
-                    <Button variant="outline" size="sm" onClick={() => duplicateModule(m.id)}>Duplicate</Button>
+                <div
+                  key={m.id}
+                  className={`relative glass-card p-4 space-y-3 ${selectedModuleId === m.id ? 'ring-2 ring-primary/50' : ''}`}
+                  onClick={() => setSelectedModuleId(m.id)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="admin" className="absolute right-3 top-3">+ Block</Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'text')}>
+                        📝 Text Block
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'bullets')}>
+                        📋 Bullet List
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'image')}>
+                        🖼️ Image
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'video')}>
+                        🎥 Video
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'code')}>
+                        💻 Code Snippet
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'quiz')}>
+                        ❓ Quiz
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'assignment')}>
+                        📚 Assignment
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'composite')}>
+                        📦 Composite
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <Label>Display Index</Label>
+                      <Input value={m.displayIndex || ''} onChange={(e) => updateModule(m.id, { displayIndex: e.target.value })} placeholder="e.g. 1 or 2.1" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label>Title</Label>
+                      <Input value={m.title} onChange={(e) => updateModule(m.id, { title: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Order</Label>
+                      <Input type="number" value={m.order} onChange={(e) => updateModule(m.id, { order: Number(e.target.value) })} />
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                   <div>
-                    <Label>Display Index</Label>
-                    <Input value={m.displayIndex || ''} onChange={(e) => updateModule(m.id, { displayIndex: e.target.value })} placeholder="e.g. 1 or 2.1" />
+                    <Label>Description</Label>
+                    <Textarea value={m.description || ''} onChange={(e) => updateModule(m.id, { description: e.target.value })} />
                   </div>
-                  <div className="md:col-span-2">
-                    <Label>Title</Label>
-                    <Input value={m.title} onChange={(e) => updateModule(m.id, { title: e.target.value })} />
-                  </div>
-                  <div>
-                    <Label>Order</Label>
-                    <Input type="number" value={m.order} onChange={(e) => updateModule(m.id, { order: Number(e.target.value) })} />
-                  </div>
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Textarea value={m.description || ''} onChange={(e) => updateModule(m.id, { description: e.target.value })} />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => moveModule(m.id, -1)} disabled={i === 0}>Up</Button>
-                  <Button variant="outline" size="sm" onClick={() => moveModule(m.id, +1)} disabled={i === arr.length - 1}>Down</Button>
-                </div>
-                {!collapsed.current[m.id] && (
-                <>
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Content Blocks</h4>
                   <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" onClick={() => addBlock(m.id)}>Add Block</Button>
-                    <Button variant="outline" size="sm" onClick={() => addBlockOfType(m.id, 'text')}>+ Text</Button>
-                    <Button variant="outline" size="sm" onClick={() => addBlockOfType(m.id, 'bullets')}>+ Bullets</Button>
-                    <Button variant="outline" size="sm" onClick={() => addBlockOfType(m.id, 'image')}>+ Image</Button>
-                    <Button variant="outline" size="sm" onClick={() => addBlockOfType(m.id, 'code')}>+ Code</Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="icon" onClick={() => moveModule(m.id, -1)} disabled={i === 0}>
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Move Up</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="icon" onClick={() => moveModule(m.id, +1)} disabled={i === arr.length - 1}>
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Move Down</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="icon" onClick={() => {
+                          setCourse((c: any) => {
+                            const mods = [...(c.modules || [])].sort((a, b) => a.order - b.order);
+                            const copy = structuredClone(m);
+                            copy.id = `m-${Date.now()}`;
+                            copy.title = `${m.title} (Copy)`;
+                            copy.order = (mods.length + 1);
+                            copy.displayIndex = '';
+                            copy.contentBlocks = (copy.contentBlocks || []).map((b: any, j: number) => ({ ...b, id: `b-${Date.now()}-${j}`, displayIndex: '', order: j + 1 }));
+                            return { ...c, modules: [...mods, copy] };
+                          });
+                          }}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Duplicate Module</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="destructive" size="icon" onClick={() => removeModule(m.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Remove Module</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
-                </div>
-                <div className="space-y-3">
-                  {(m.contentBlocks || []).sort((a: any, b: any) => a.order - b.order).map((b: any, bi: number, barr: any[]) => (
-                    <div key={b.id} className="border rounded-lg p-3">
-                      <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
-                        <div>
-                          <Label>Idx</Label>
-                          <Input value={b.displayIndex || ''} onChange={(e) => updateBlock(m.id, b.id, { displayIndex: e.target.value })} placeholder={`${m.displayIndex || ''}.1`} />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!m.isLocked} onCheckedChange={(v) => updateModule(m.id, { isLocked: !!v })} />
+                      <Label className="cursor-pointer" onClick={() => updateModule(m.id, { isLocked: !m.isLocked })}>Locked</Label>
+                    </div>
+                    <div className={`rounded-md p-2 ${m.sequentialRequired ? 'border-amber-400 bg-amber-50' : 'border-muted'}`}>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!m.sequentialRequired} onCheckedChange={(v) => updateModule(m.id, { sequentialRequired: !!v })} />
+                        <Label className="cursor-pointer" onClick={() => updateModule(m.id, { sequentialRequired: !m.sequentialRequired })}>Sequential Required</Label>
+                        {m.sequentialRequired && <span className="text-xs text-amber-700">Enforces order of required blocks</span>}
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label>Prerequisite Modules</Label>
+                      <div className="mt-2 border rounded p-2 max-h-40 overflow-auto space-y-1">
+                        {(course.modules || []).filter((mm: any) => mm.id !== m.id).sort((a: any, b: any) => a.order - b.order).map((mm: any) => {
+                          const list = Array.isArray(m.prerequisites) ? m.prerequisites : [];
+                          const checked = list.includes(mm.id);
+                          return (
+                            <label key={mm.id} className="flex items-center gap-2 text-sm">
+                              <input type="checkbox" checked={checked} onChange={(e) => {
+                                const next = new Set<string>(list);
+                                if (e.target.checked) next.add(mm.id); else next.delete(mm.id);
+                                updateModule(m.id, { prerequisites: Array.from(next) as any });
+                              }} />
+                              <span>{mm.displayIndex ? `${mm.displayIndex} ` : ''}{mm.title}</span>
+                            </label>
+                          );
+                        })}
+                        {((course.modules || []).filter((mm: any) => mm.id !== m.id).length === 0) && (
+                          <div className="text-xs text-muted-foreground">No other modules to select.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button variant="destructive" size="sm" onClick={() => removeModule(m.id)}>Remove Module</Button>
+                  </div>
+                  <div className="space-y-3">
+                    {(m.contentBlocks || []).sort((a: any, b: any) => a.order - b.order).map((b: any, bi: number, barr: any[]) => (
+                      <div key={b.id} className="border rounded p-3">
+                        <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+                          <div>
+                            <Label>Idx</Label>
+                            <Input value={b.displayIndex || ''} onChange={(e) => updateBlock(m.id, b.id, { displayIndex: e.target.value })} placeholder={`${m.displayIndex || ''}.1`} />
+                          </div>
+                          <div className="mt-2 flex gap-2 items-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" onClick={() => moveBlock(m.id, b.id, -1)} disabled={bi === 0}>
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Move Up</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" onClick={() => moveBlock(m.id, b.id, +1)} disabled={bi === barr.length - 1}>
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Move Down</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'text')}>Insert Text Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'video')}>Insert Video Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'code')}>Insert Code Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'bullets')}>Insert Bullets Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'image')}>Insert Image Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'composite')}>Insert Composite Above</DropdownMenuItem>
+                                <Separator className="my-1" />
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'text')}>Insert Text Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'video')}>Insert Video Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'code')}>Insert Code Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'bullets')}>Insert Bullets Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'image')}>Insert Image Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'composite')}>Insert Composite Below</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <div>
+                            <Label>Type</Label>
+                            <Select value={b.type} onValueChange={(v) => updateBlock(m.id, b.id, { type: v })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="video">Video</SelectItem>
+                                <SelectItem value="code">Code</SelectItem>
+                                <SelectItem value="quiz">Quiz</SelectItem>
+                                <SelectItem value="assignment">Assignment</SelectItem>
+                                <SelectItem value="bullets">Bullets</SelectItem>
+                                <SelectItem value="image">Image</SelectItem>
+                                <SelectItem value="composite">Composite</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="md:col-span-3">
+                            <Label>Title</Label>
+                            <Input value={b.title} onChange={(e) => updateBlock(m.id, b.id, { title: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Order</Label>
+                            <Input type="number" value={b.order} onChange={(e) => updateBlock(m.id, b.id, { order: Number(e.target.value) })} />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch checked={!!b.isRequired} onCheckedChange={(v) => updateBlock(m.id, b.id, { isRequired: !!v })} />
+                            <Label className="cursor-pointer" onClick={() => updateBlock(m.id, b.id, { isRequired: !b.isRequired })}>Required</Label>
+                          </div>
                         </div>
-                        <div className="mt-2 flex gap-2 flex-wrap">
-                          <Button variant="outline" size="sm" onClick={() => moveBlock(m.id, b.id, -1)} disabled={bi === 0}>Up</Button>
-                          <Button variant="outline" size="sm" onClick={() => moveBlock(m.id, b.id, +1)} disabled={bi === barr.length - 1}>Down</Button>
-                          <Button variant="outline" size="sm" onClick={() => duplicateBlock(m.id, b.id)}>Duplicate</Button>
-                        </div>
-                        <div>
-                          <Label>Type</Label>
-                          <Select value={b.type} onValueChange={(v) => updateBlock(m.id, b.id, { type: v })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text</SelectItem>
-                              <SelectItem value="video">Video</SelectItem>
-                              <SelectItem value="code">Code</SelectItem>
-                              <SelectItem value="bullets">Bullets</SelectItem>
-                              <SelectItem value="image">Image</SelectItem>
-                              <SelectItem value="composite">Composite</SelectItem>
-                              <SelectItem value="quiz">Quiz</SelectItem>
-                              <SelectItem value="assignment">Assignment</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {b.type !== 'composite' && (
-                          <div className="mt-2">
-                            <Button variant="outline" size="sm" onClick={() => convertBlockToComposite(m.id, b.id)}>Convert to Composite</Button>
+                        {b.type === 'text' && (
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <div className="md:col-span-3">
+                                <Label>Content (Markdown supported)</Label>
+                                <Textarea value={b.content || ''} onChange={(e) => updateBlock(m.id, b.id, { content: e.target.value, markdown: true })} />
+                              </div>
+                              <div>
+                                <Label>Heading Level</Label>
+                                <Input type="number" value={b.textHeadingLevel || 0} onChange={(e) => updateBlock(m.id, b.id, { textHeadingLevel: Number(e.target.value) || 0 })} />
+                              </div>
+                              <div>
+                                <Label>Font Size (px)</Label>
+                                <Input value={b.textFontSize || ''} onChange={(e) => updateBlock(m.id, b.id, { textFontSize: e.target.value })} placeholder="e.g. 16px" />
+                                <div className="flex gap-1 mt-1">
+                                  {[
+                                    { k: 'sm', v: '14px' },
+                                    { k: 'md', v: '16px' },
+                                    { k: 'lg', v: '18px' },
+                                    { k: 'xl', v: '24px' },
+                                  ].map((p) => (
+                                    <Button key={p.k} type="button" size="sm" variant={b.textFontSize === p.v ? 'default' : 'outline'} onClick={() => updateBlock(m.id, b.id, { textFontSize: p.v })}>
+                                      {p.k}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="border rounded p-2 bg-muted/30">
+                              <div className="text-xs text-muted-foreground mb-1">Preview</div>
+                              {(() => {
+                                const style: any = {};
+                                if (b.textFontSize) style.fontSize = b.textFontSize;
+                                const lvl = Number(b.textHeadingLevel) || 0;
+                                const content = <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{b.content || ''}</ReactMarkdown>;
+                                if (lvl >= 1 && lvl <= 6) {
+                                  const Tag = (`h${lvl}` as any);
+                                  return <Tag style={style}>{content}</Tag>;
+                                }
+                                return <div style={style}>{content}</div>;
+                              })()}
+                            </div>
                           </div>
                         )}
-                        <div className="md:col-span-3">
-                          <Label>Title</Label>
-                          <Input value={b.title} onChange={(e) => updateBlock(m.id, b.id, { title: e.target.value })} />
-                        </div>
-                        <div>
-                          <Label>Order</Label>
-                          <Input type="number" value={b.order} onChange={(e) => updateBlock(m.id, b.id, { order: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Est. Minutes</Label>
-                          <Input type="number" value={b.estimatedMinutes ?? 5} onChange={(e) => updateBlock(m.id, b.id, { estimatedMinutes: Number(e.target.value) })} />
-                        </div>
-                      </div>
-                      {/* Conditional editors */}
-                      {b.type === 'text' && (
-                        <div className="mt-2 space-y-2">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {b.type === 'video' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                             <div>
-                              <Label>Heading Level</Label>
-                              <Select value={String(b.textHeadingLevel ?? 'none')} onValueChange={(v) => updateBlock(m.id, b.id, { textHeadingLevel: v === 'none' ? undefined : Number(v) })}>
-                                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  <SelectItem value="1">H1</SelectItem>
-                                  <SelectItem value="2">H2</SelectItem>
-                                  <SelectItem value="3">H3</SelectItem>
-                                  <SelectItem value="4">H4</SelectItem>
-                                  <SelectItem value="5">H5</SelectItem>
-                                  <SelectItem value="6">H6</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <Label>Video URL</Label>
+                              <Input value={b.videoUrl || ''} onChange={(e) => updateBlock(m.id, b.id, { videoUrl: e.target.value })} />
                             </div>
                             <div>
-                              <Label>Font Size</Label>
-                              <Select value={b.textFontSize || 'default'} onValueChange={(v) => updateBlock(m.id, b.id, { textFontSize: v === 'default' ? undefined : v })}>
-                                <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="default">Default</SelectItem>
-                                  <SelectItem value="text-sm">Small</SelectItem>
-                                  <SelectItem value="text-base">Base</SelectItem>
-                                  <SelectItem value="text-lg">Large</SelectItem>
-                                  <SelectItem value="text-xl">XL</SelectItem>
-                                  <SelectItem value="text-2xl">2XL</SelectItem>
-                                  <SelectItem value="text-3xl">3XL</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <Label>Minimum Watch Percent (%)</Label>
+                              <Input type="number" value={typeof b.requiredPercent === 'number' ? Math.round(b.requiredPercent * 100) : 80} onChange={(e) => {
+                                const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                updateBlock(m.id, b.id, { requiredPercent: val / 100 });
+                              }} />
                             </div>
                           </div>
-                          <div>
-                            <Label>Content</Label>
-                            <Textarea value={b.content || ''} onChange={(e) => updateBlock(m.id, b.id, { content: e.target.value })} />
-                          </div>
-                        </div>
-                      )}
-                      {b.type === 'composite' && (
-                        <div className="mt-2 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h5 className="font-medium">Composite Items</h5>
-                            <div className="flex gap-2 flex-wrap">
-                              <Button size="sm" variant="outline" onClick={() => updateBlock(m.id, b.id, { items: [...(b.items || []), { id: `ci-${Date.now()}`, kind: 'text', content: '' }] })}>+ Text</Button>
-                              <Button size="sm" variant="outline" onClick={() => updateBlock(m.id, b.id, { items: [...(b.items || []), { id: `ci-${Date.now()}`, kind: 'bullets', bullets: [] }] })}>+ Bullets</Button>
-                              <Button size="sm" variant="outline" onClick={() => updateBlock(m.id, b.id, { items: [...(b.items || []), { id: `ci-${Date.now()}`, kind: 'image', imageUrl: '', alt: '', caption: '' }] })}>+ Image</Button>
-                              <Button size="sm" variant="outline" onClick={() => updateBlock(m.id, b.id, { items: [...(b.items || []), { id: `ci-${Date.now()}`, kind: 'video', videoUrl: '' }] })}>+ Video</Button>
-                              <Button size="sm" variant="outline" onClick={() => updateBlock(m.id, b.id, { items: [...(b.items || []), { id: `ci-${Date.now()}`, kind: 'code', codeLanguage: 'javascript', codeContent: '' }] })}>+ Code</Button>
-                            </div>
-                          </div>
-                          <div className="space-y-3">
-                            {(b.items || []).map((it: any, ii: number, arr2: any[]) => (
-                              <div key={it.id || ii} className="border rounded p-3 space-y-3">
-                                <div className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end">
-                                  <div>
-                                    <Label>Kind</Label>
-                                    <Select value={it.kind} onValueChange={(v) => {
-                                      const items = [...(b.items || [])];
-                                      items[ii] = { ...it, kind: v } as any;
-                                      updateBlock(m.id, b.id, { items });
-                                    }}>
-                                      <SelectTrigger><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="text">Text</SelectItem>
-                                        <SelectItem value="bullets">Bullets</SelectItem>
-                                        <SelectItem value="image">Image</SelectItem>
-                                        <SelectItem value="video">Video</SelectItem>
-                                        <SelectItem value="code">Code</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="flex gap-2 md:col-span-2">
-                                    <Button size="sm" variant="outline" onClick={() => moveCompositeItem(m.id, b.id, ii, ii - 1)} disabled={ii === 0}>Up</Button>
-                                    <Button size="sm" variant="outline" onClick={() => moveCompositeItem(m.id, b.id, ii, ii + 1)} disabled={ii === arr2.length - 1}>Down</Button>
-                                    <Button size="sm" variant="destructive" onClick={() => updateBlock(m.id, b.id, { items: (b.items || []).filter((_: any, idx: number) => idx !== ii) })}>Remove</Button>
+                        )}
+                        {b.type === 'code' && (
+                          <div className="mt-2">
+                            <div className="rounded-md overflow-hidden border bg-[#1e1e1e]">
+                              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
+                                  <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
+                                  <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-200">
+                                  <Label className="text-xs text-gray-400">Language</Label>
+                                  <Select value={b.codeLanguage || 'javascript'} onValueChange={(v) => updateBlock(m.id, b.id, { codeLanguage: v })}>
+                                    <SelectTrigger className="h-7 w-40 bg-[#2a2a2a] text-gray-100 border-white/10"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="javascript">JavaScript</SelectItem>
+                                      <SelectItem value="typescript">TypeScript</SelectItem>
+                                      <SelectItem value="python">Python</SelectItem>
+                                      <SelectItem value="java">Java</SelectItem>
+                                      <SelectItem value="html">HTML</SelectItem>
+                                      <SelectItem value="css">CSS</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <div className="text-xs text-gray-400 ml-2">
+                                    {((b.codeContent || '').split(/\r?\n/).length)} lines • {(b.codeContent || '').length} chars
                                   </div>
                                 </div>
-                                {/* Markdown removed */}
-                                {it.kind === 'text' && (
-                                  <div className="space-y-2">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                      <div>
-                                        <Label>Heading Level</Label>
-                                        <Select value={String(it.textHeadingLevel ?? 'none')} onValueChange={(v) => {
-                                          const items = [...(b.items || [])];
-                                          items[ii] = { ...it, textHeadingLevel: v === 'none' ? undefined : Number(v) };
-                                          updateBlock(m.id, b.id, { items });
-                                        }}>
-                                          <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            <SelectItem value="1">H1</SelectItem>
-                                            <SelectItem value="2">H2</SelectItem>
-                                            <SelectItem value="3">H3</SelectItem>
-                                            <SelectItem value="4">H4</SelectItem>
-                                            <SelectItem value="5">H5</SelectItem>
-                                            <SelectItem value="6">H6</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div>
-                                        <Label>Font Size</Label>
-                                        <Select value={it.textFontSize || 'default'} onValueChange={(v) => {
-                                          const items = [...(b.items || [])];
-                                          items[ii] = { ...it, textFontSize: v === 'default' ? undefined : v };
-                                          updateBlock(m.id, b.id, { items });
-                                        }}>
-                                          <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="default">Default</SelectItem>
-                                            <SelectItem value="text-sm">Small</SelectItem>
-                                            <SelectItem value="text-base">Base</SelectItem>
-                                            <SelectItem value="text-lg">Large</SelectItem>
-                                            <SelectItem value="text-xl">XL</SelectItem>
-                                            <SelectItem value="text-2xl">2XL</SelectItem>
-                                            <SelectItem value="text-3xl">3XL</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <Label>Text</Label>
-                                      <Textarea value={it.content || ''} onChange={(e) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, content: e.target.value };
-                                        updateBlock(m.id, b.id, { items });
-                                      }} />
-                                    </div>
-                                  </div>
-                                )}
-                                {it.kind === 'bullets' && (
-                                  <div>
-                                    <Label>Bullets (newline = new item)</Label>
-                                    <Textarea value={(it.bullets || []).join("\n")} onChange={(e) => {
-                                      const items = [...(b.items || [])];
-                                      items[ii] = { ...it, bullets: (e.target.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean) };
-                                      updateBlock(m.id, b.id, { items });
-                                    }} />
-                                  </div>
-                                )}
-                                {it.kind === 'image' && (
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                    <div className="md:col-span-2">
-                                      <Label>Image URL</Label>
-                                      <Input value={it.imageUrl || ''} onChange={(e) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, imageUrl: e.target.value };
-                                        updateBlock(m.id, b.id, { items });
-                                      }} />
-                                    </div>
-                                    <div>
-                                      <Label>Alt</Label>
-                                      <Input value={it.alt || ''} onChange={(e) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, alt: e.target.value };
-                                        updateBlock(m.id, b.id, { items });
-                                      }} />
-                                    </div>
-                                    <div className="md:col-span-3">
-                                      <Label>Caption</Label>
-                                      <Input value={it.caption || ''} onChange={(e) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, caption: e.target.value };
-                                        updateBlock(m.id, b.id, { items });
-                                      }} />
-                                    </div>
-                                  </div>
-                                )}
-                                {it.kind === 'video' && (
-                                  <div>
-                                    <Label>Video URL</Label>
-                                    <Input value={it.videoUrl || ''} onChange={(e) => {
-                                      const items = [...(b.items || [])];
-                                      items[ii] = { ...it, videoUrl: e.target.value };
-                                      updateBlock(m.id, b.id, { items });
-                                    }} />
-                                  </div>
-                                )}
-                                {it.kind === 'code' && (
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                    <div>
-                                      <Label>Language</Label>
-                                      <Select value={it.codeLanguage || 'javascript'} onValueChange={(v) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, codeLanguage: v };
-                                        updateBlock(m.id, b.id, { items });
-                                      }}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="javascript">JavaScript</SelectItem>
-                                          <SelectItem value="python">Python</SelectItem>
-                                          <SelectItem value="java">Java</SelectItem>
-                                          <SelectItem value="typescript">TypeScript</SelectItem>
-                                          <SelectItem value="c">C</SelectItem>
-                                          <SelectItem value="cpp">C++</SelectItem>
-                                          <SelectItem value="go">Go</SelectItem>
-                                          <SelectItem value="ruby">Ruby</SelectItem>
-                                          <SelectItem value="html">HTML</SelectItem>
-                                          <SelectItem value="css">CSS</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <Label>Font Size</Label>
-                                      <Select value={it.codeFontSize || '12'} onValueChange={(v) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, codeFontSize: v };
-                                        updateBlock(m.id, b.id, { items });
-                                      }}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="10">10px</SelectItem>
-                                          <SelectItem value="12">12px</SelectItem>
-                                          <SelectItem value="14">14px</SelectItem>
-                                          <SelectItem value="16">16px</SelectItem>
-                                          <SelectItem value="18">18px</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div className="md:col-span-3">
-                                      <Label>Code</Label>
-                                      <Textarea value={it.codeContent || ''} onChange={(e) => {
-                                        const items = [...(b.items || [])];
-                                        items[ii] = { ...it, codeContent: e.target.value };
-                                        updateBlock(m.id, b.id, { items });
-                                      }} className="font-mono" style={{ fontSize: (it.codeFontSize ? Number(it.codeFontSize) : 12) + 'px' }} />
-                                    </div>
-                                  </div>
-                                )}
                               </div>
-                            ))}
+                              <div className="p-3">
+                                <Textarea value={b.codeContent || ''} onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value })} className="font-mono bg-[#1e1e1e] text-gray-100 border-none outline-none min-h-40" />
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {b.type === 'video' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                          <div>
-                            <Label>Video URL</Label>
-                            <Input value={b.videoUrl || ''} onChange={(e) => updateBlock(m.id, b.id, { videoUrl: e.target.value })} />
-                          </div>
-                          <div>
-                            <Label>Duration (sec)</Label>
-                            <Input type="number" value={b.videoDuration || 0} onChange={(e) => updateBlock(m.id, b.id, { videoDuration: Number(e.target.value) })} />
-                          </div>
-                        </div>
-                      )}
-                      {b.type === 'code' && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
-                          <div>
-                            <Label>Kind</Label>
-                            <Select value={b.codeKind || 'illustrative'} onValueChange={(v) => updateBlock(m.id, b.id, { codeKind: v })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="illustrative">Illustrative</SelectItem>
-                                <SelectItem value="exam">Exam (runnable)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>Language</Label>
-                            <Select value={b.codeLanguage || 'javascript'} onValueChange={(v) => updateBlock(m.id, b.id, { codeLanguage: v })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="javascript">JavaScript</SelectItem>
-                                <SelectItem value="python">Python</SelectItem>
-                                <SelectItem value="java">Java</SelectItem>
-                                <SelectItem value="typescript">TypeScript</SelectItem>
-                                <SelectItem value="c">C</SelectItem>
-                                <SelectItem value="cpp">C++</SelectItem>
-                                <SelectItem value="go">Go</SelectItem>
-                                <SelectItem value="ruby">Ruby</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>Time Limit (ms)</Label>
-                            <Input type="number" value={b.timeLimitMs || 2000} onChange={(e) => updateBlock(m.id, b.id, { timeLimitMs: Number(e.target.value) })} />
-                          </div>
-                          <div>
-                            <Label>Memory (MB)</Label>
-                            <Input type="number" value={b.memoryLimitMb || 256} onChange={(e) => updateBlock(m.id, b.id, { memoryLimitMb: Number(e.target.value) })} />
-                          </div>
-                          <div className="md:col-span-3">
-                            <Label>Starter Code</Label>
-                            <Textarea value={b.codeTemplate || ''} onChange={(e) => updateBlock(m.id, b.id, { codeTemplate: e.target.value })} />
-                          </div>
-                          <div className="md:col-span-3">
-                            <Label>Code Content</Label>
-                            <Textarea value={b.codeContent || ''} onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value })} className="font-mono" style={{ fontSize: (b.codeFontSize ? Number(b.codeFontSize) : 12) + 'px' }} />
-                          </div>
-                          <div className="md:col-span-3">
-                            <Label>Test Cases (JSON)</Label>
-                            <Textarea value={JSON.stringify(b.testCases || [], null, 2)} onChange={(e) => {
-                              try { updateBlock(m.id, b.id, { testCases: JSON.parse(e.target.value) }); } catch {}
-                            }} />
-                          </div>
-                        </div>
-                      )}
-                      {b.type === 'bullets' && (
-                        <div className="mt-2 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label>Bullet Points</Label>
-                            <Button size="sm" onClick={() => {
-                              const items = [...(b.bullets || [])];
-                              items.push('New bullet');
-                              updateBlock(m.id, b.id, { bullets: items });
-                            }}>Add Bullet</Button>
-                          </div>
-                          <div>
+                        )}
+                        {b.type === 'bullets' && (
+                          <div className="mt-2">
                             <Label>List (newline = new bullet)</Label>
                             <Textarea value={(b.bullets || []).join("\n")} onChange={(e) => {
                               const lines = (e.target.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
                               updateBlock(m.id, b.id, { bullets: lines });
                             }} placeholder={"First item\nSecond item\nThird item"} />
                           </div>
-                          {(b.bullets || []).map((item: string, ii: number) => (
-                            <div key={ii} className="flex gap-2 items-center">
-                              <Input className="flex-1" value={item} onChange={(e) => {
-                                const items = [...(b.bullets || [])];
-                                items[ii] = e.target.value;
-                                updateBlock(m.id, b.id, { bullets: items });
-                              }} onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  const items = [...(b.bullets || [])];
-                                  items.splice(ii + 1, 0, '');
-                                  updateBlock(m.id, b.id, { bullets: items });
-                                }
-                              }} />
-                              <Button variant="outline" size="sm" onClick={() => {
-                                if (ii === 0) return;
-                                const items = [...(b.bullets || [])];
-                                const tmp = items[ii - 1];
-                                items[ii - 1] = items[ii];
-                                items[ii] = tmp;
-                                updateBlock(m.id, b.id, { bullets: items });
-                              }}>Up</Button>
-                              <Button variant="outline" size="sm" onClick={() => {
-                                const items = [...(b.bullets || [])];
-                                if (ii >= items.length - 1) return;
-                                const tmp = items[ii + 1];
-                                items[ii + 1] = items[ii];
-                                items[ii] = tmp;
-                                updateBlock(m.id, b.id, { bullets: items });
-                              }}>Down</Button>
-                              <Button variant="destructive" size="sm" onClick={() => {
-                                const items = (b.bullets || []).filter((_: string, idx: number) => idx !== ii);
-                                updateBlock(m.id, b.id, { bullets: items });
-                              }}>Remove</Button>
-                            </div>
-                          ))}
+                        )}
+                        {b.type === 'image' && (
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                            <div className="md:col-span-2">
+                              <Label>Image URL</Label>
+                              <Input value={b.imageUrl || ''} onChange={(e) => updateBlock(m.id, b.id, { imageUrl: e.target.value })} />
+                            </div>
                             <div>
-                              <Label>Mode</Label>
-                              <Select value={String(b.bulletsMarkdown ?? false)} onValueChange={(v) => updateBlock(m.id, b.id, { bulletsMarkdown: v === 'true' })}>
-                                <SelectTrigger><SelectValue placeholder="Plain" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="false">Plain Inputs</SelectItem>
-                                  <SelectItem value="true">Markdown List</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <Label>Alt Text</Label>
+                              <Input value={b.alt || ''} onChange={(e) => updateBlock(m.id, b.id, { alt: e.target.value })} />
                             </div>
                           </div>
-                          {b.bulletsMarkdown && (
+                        )}
+                        {b.type === 'assignment' && (
+                          <div className="mt-2 space-y-3">
                             <div>
-                              <Label>Markdown List</Label>
-                              <Textarea value={(b.bullets || []).map((x: string) => `- ${x}`).join("\n")} onChange={(e) => {
-                                const lines = (e.target.value || '').split(/\r?\n/).map(l => l.replace(/^[-*]\s?/, '')).filter(Boolean);
-                                updateBlock(m.id, b.id, { bullets: lines });
-                              }} placeholder="- First item\n- Second item" />
+                              <Label>Assignment Instructions</Label>
+                              <Textarea
+                                value={b.content || ''}
+                                onChange={(e) => updateBlock(m.id, b.id, { content: e.target.value })}
+                                placeholder="Describe the task and requirements"
+                              />
                             </div>
-                          )}
-                        </div>
-                      )}
-                      {b.type === 'image' && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
-                          <div className="md:col-span-2">
-                            <Label>Image URL</Label>
-                            <Input value={b.imageUrl || ''} onChange={(e) => updateBlock(m.id, b.id, { imageUrl: e.target.value })} />
-                          </div>
-                          <div>
-                            <Label>Alt Text</Label>
-                            <Input value={b.alt || ''} onChange={(e) => updateBlock(m.id, b.id, { alt: e.target.value })} />
-                          </div>
-                          <div className="md:col-span-3">
-                            <Label>Caption</Label>
-                            <Input value={b.caption || ''} onChange={(e) => updateBlock(m.id, b.id, { caption: e.target.value })} />
-                          </div>
-                          <div className="md:col-span-3">
-                            <Label>Upload</Label>
-                            <input type="file" accept="image/*" onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => updateBlock(m.id, b.id, { imageUrl: String(reader.result) });
-                              reader.readAsDataURL(file);
-                            }} />
-                          </div>
-                        </div>
-                      )}
-                      {b.type === 'quiz' && (
-                        <div className="mt-2 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="font-medium">Quiz Questions</div>
-                            <Button size="sm" onClick={() => {
-                              const quiz = b.quiz || { questions: [], passingScore: 0, allowRetakes: true };
-                              const next = { ...quiz, questions: [...quiz.questions, { id: `q-${Date.now()}`, question: 'New question', type: 'multiple-choice', options: [{ id: 'a', text: 'Option A' }, { id: 'b', text: 'Option B' }], correctOptionId: 'a', explanation: '', difficulty: 'easy', points: 1 }] };
-                              updateBlock(m.id, b.id, { quiz: next });
-                            }}>Add Question</Button>
-                          </div>
-
-                          {(b.quiz?.questions || []).map((q: any, qi: number) => (
-                            <div key={q.id} className="border rounded p-3 space-y-2">
-                              <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
-                                <div className="md:col-span-3">
-                                  <Label>Question</Label>
-                                  <Input value={q.question} onChange={(e) => {
-                                    const qs = [...(b.quiz?.questions || [])];
-                                    qs[qi] = { ...q, question: e.target.value };
-                                    updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                  }} />
-                                </div>
-                                <div>
-                                  <Label>Type</Label>
-                                  <Select value={q.type} onValueChange={(v) => {
-                                    const qs = [...(b.quiz?.questions || [])];
-                                    qs[qi] = { ...q, type: v };
-                                    updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                  }}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                            <div className="rounded-md overflow-hidden border bg-[#1e1e1e]">
+                              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                                <div className="flex items-center gap-2 text-gray-200">
+                                  <Label className="text-xs text-gray-400">Language</Label>
+                                  <Select value={b.codeLanguage || 'javascript'} onValueChange={(v) => updateBlock(m.id, b.id, { codeLanguage: v })}>
+                                    <SelectTrigger className="h-7 w-40 bg-[#2a2a2a] text-gray-100 border-white/10"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="multiple-choice">Multiple Choice</SelectItem>
-                                      <SelectItem value="true-false">True / False</SelectItem>
-                                      <SelectItem value="fill-blank">Fill in the Blank</SelectItem>
+                                      <SelectItem value="javascript">JavaScript</SelectItem>
+                                      <SelectItem value="typescript">TypeScript</SelectItem>
+                                      <SelectItem value="python">Python</SelectItem>
+                                      <SelectItem value="java">Java</SelectItem>
+                                      <SelectItem value="html">HTML</SelectItem>
+                                      <SelectItem value="css">CSS</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  <div className="text-xs text-gray-400 ml-2">
+                                    {((b.codeContent || '').split(/\r?\n/).length)} lines • {(b.codeContent || '').length} chars
+                                  </div>
                                 </div>
-                                <div>
-                                  <Label>Difficulty</Label>
-                                  <Select value={q.difficulty || 'easy'} onValueChange={(v) => {
-                                    const qs = [...(b.quiz?.questions || [])];
-                                    qs[qi] = { ...q, difficulty: v };
-                                    updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                  }}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="easy">Easy</SelectItem>
-                                      <SelectItem value="medium">Medium</SelectItem>
-                                      <SelectItem value="hard">Hard</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div>
-                                  <Label>Points</Label>
-                                  <Input type="number" value={q.points || 1} onChange={(e) => {
-                                    const qs = [...(b.quiz?.questions || [])];
-                                    qs[qi] = { ...q, points: Number(e.target.value) };
-                                    updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                  }} />
-                                </div>
+                                <div className="text-xs text-gray-400">Code Kind: assignment</div>
                               </div>
-
-                              {/* Options editor */}
+                              <div className="p-3">
+                                <Textarea
+                                  value={b.codeContent || ''}
+                                  onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value, codeKind: 'assignment' })}
+                                  className="font-mono bg-[#1e1e1e] text-gray-100 border-none outline-none min-h-40"
+                                  placeholder="// Starter code or submission template"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label>Test Cases</Label>
+                                <Button size="sm" onClick={() => {
+                                  const arr = Array.isArray(b.testCases) ? [...b.testCases] : [];
+                                  arr.push({ id: `tc-${Date.now()}`, input: '', expectedOutput: '' });
+                                  updateBlock(m.id, b.id, { testCases: arr });
+                                }}>Add Case</Button>
+                              </div>
                               <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label>Options</Label>
-                                  <Button size="sm" onClick={() => {
-                                    const qs = [...(b.quiz?.questions || [])];
-                                    const opts = [...(q.options || [])];
-                                    const newId = String.fromCharCode(97 + opts.length); // a, b, c...
-                                    opts.push({ id: newId, text: `Option ${newId.toUpperCase()}` });
-                                    qs[qi] = { ...q, options: opts };
-                                    updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                  }}>Add Option</Button>
-                                </div>
-                                {(q.options || []).map((opt: any, oi: number) => (
-                                  <div key={opt.id} className="grid grid-cols-1 md:grid-cols-6 gap-2 items-center">
-                                    <div className="md:col-span-4">
-                                      <Input value={opt.text} onChange={(e) => {
-                                        const qs = [...(b.quiz?.questions || [])];
-                                        const opts = [...(q.options || [])];
-                                        opts[oi] = { ...opt, text: e.target.value };
-                                        qs[qi] = { ...q, options: opts };
-                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                {(Array.isArray(b.testCases) ? b.testCases : []).map((tc: any, ti: number) => (
+                                  <div key={tc.id || ti} className="grid grid-cols-1 md:grid-cols-2 gap-2 border rounded p-2">
+                                    <div>
+                                      <Label>Input</Label>
+                                      <Textarea value={tc.input || ''} onChange={(e) => {
+                                        const arr = Array.isArray(b.testCases) ? [...b.testCases] : [];
+                                        arr[ti] = { ...tc, input: e.target.value };
+                                        updateBlock(m.id, b.id, { testCases: arr });
                                       }} />
                                     </div>
                                     <div>
-                                      <Button variant={q.correctOptionId === opt.id ? 'default' : 'outline'} size="sm" onClick={() => {
-                                        const qs = [...(b.quiz?.questions || [])];
-                                        qs[qi] = { ...q, correctOptionId: opt.id };
-                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                      }}>{q.correctOptionId === opt.id ? 'Correct' : 'Mark Correct'}</Button>
+                                      <Label>Expected Output</Label>
+                                      <Textarea value={tc.expectedOutput || ''} onChange={(e) => {
+                                        const arr = Array.isArray(b.testCases) ? [...b.testCases] : [];
+                                        arr[ti] = { ...tc, expectedOutput: e.target.value };
+                                        updateBlock(m.id, b.id, { testCases: arr });
+                                      }} />
                                     </div>
-                                    <div>
+                                    <div className="md:col-span-2 flex justify-end">
                                       <Button variant="destructive" size="sm" onClick={() => {
-                                        const qs = [...(b.quiz?.questions || [])];
-                                        const opts = (q.options || []).filter((_: any, idx: number) => idx !== oi);
-                                        const newCorrect = (q.correctOptionId && q.correctOptionId === opt.id) ? undefined : q.correctOptionId;
-                                        qs[qi] = { ...q, options: opts, correctOptionId: newCorrect };
-                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                        const arr = (b.testCases || []).filter((_: any, idx: number) => idx !== ti);
+                                        updateBlock(m.id, b.id, { testCases: arr });
                                       }}>Remove</Button>
                                     </div>
                                   </div>
                                 ))}
                               </div>
-
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                               <div>
-                                <Label>Explanation</Label>
-                                <Textarea value={q.explanation || ''} onChange={(e) => {
-                                  const qs = [...(b.quiz?.questions || [])];
-                                  qs[qi] = { ...q, explanation: e.target.value };
-                                  updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                }} />
-                              </div>
-
-                              <div className="flex justify-end">
-                                <Button variant="destructive" size="sm" onClick={() => {
-                                  const qs = (b.quiz?.questions || []).filter((_: any, idx: number) => idx !== qi);
-                                  updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                }}>Remove Question</Button>
+                                <Label>Points</Label>
+                                <Input type="number" value={b.assignmentPoints ?? 0} onChange={(e) => updateBlock(m.id, b.id, { assignmentPoints: Math.max(0, Number(e.target.value) || 0) })} />
                               </div>
                             </div>
-                          ))}
-
-                          {/* Quiz-level settings */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <div>
-                              <Label>Passing Score</Label>
-                              <Input type="number" value={b.quiz?.passingScore ?? 0} onChange={(e) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), passingScore: Number(e.target.value) } })} />
-                            </div>
-                            <div>
-                              <Label>Allow Retakes</Label>
-                              <Select value={String(b.quiz?.allowRetakes ?? true)} onValueChange={(v) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), allowRetakes: v === 'true' } })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="true">Yes</SelectItem>
-                                  <SelectItem value="false">No</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <div className="mt-2 flex justify-end gap-2">
-                        <Button variant="destructive" size="sm" onClick={() => removeBlock(m.id, b.id)}>Remove Block</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                </>
-                )}
-                <div className="flex justify-end">
-                  <Button variant="destructive" size="sm" onClick={() => removeModule(m.id)}>Remove Module</Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Preview Panel */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader><CardTitle>Preview</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <div className="text-lg font-medium">{course.title}</div>
-              <div className="text-sm text-muted-foreground">{course.description}</div>
-            </div>
-            <Separator />
-            <div className="space-y-4">
-              {(course.modules || []).sort((a: any, b: any) => a.order - b.order).map((m: any) => (
-                <div key={m.id} className="space-y-2">
-                  <div className="font-medium">{m.displayIndex ? `${m.displayIndex} ` : ''}{m.title}</div>
-                  <div className="space-y-3">
-                    {(m.contentBlocks || []).sort((a: any, b: any) => a.order - b.order).map((b: any) => (
-                      <div key={b.id} className="text-sm border rounded p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-mono mr-2">{b.displayIndex || ''}</span>
-                            <span className="uppercase text-xs mr-2">{b.type}</span>
-                            <span className="font-medium">{b.title || ''}</span>
-                          </div>
-                          {typeof b.estimatedMinutes === 'number' && (
-                            <div className="text-xs text-muted-foreground">~{b.estimatedMinutes} min</div>
-                          )}
-                        </div>
-                        {b.type === 'text' && (
-                          <div className="mt-2">
-                            {(() => {
-                              const text = b.content || '';
-                              const lvl = b.textHeadingLevel;
-                              if (!lvl) return <div className={b.textFontSize || ''}><div className="whitespace-pre-wrap">{text}</div></div>;
-                              const Tag: any = `h${lvl}`;
-                              const sizeClass = b.textFontSize || '';
-                              return <Tag className={['mt-0', sizeClass].filter(Boolean).join(' ')}>{text}</Tag>;
-                            })()}
-                          </div>
-                        )}
-                        {b.type === 'bullets' && (
-                          <div className="mt-2">
-                            <ul className="ml-5 list-disc space-y-1">
-                              {(b.bullets || []).map((it: string, idx: number) => (
-                                <li key={idx}>{it}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {b.type === 'image' && b.imageUrl && (
-                          <figure className="mt-2">
-                            <img src={b.imageUrl} alt={b.alt || ''} className="max-h-64 rounded border object-contain" />
-                            {(b.caption || b.alt) && (
-                              <figcaption className="text-xs text-muted-foreground mt-1">{b.caption || b.alt}</figcaption>
-                            )}
-                          </figure>
-                        )}
-                        {b.type === 'composite' && Array.isArray(b.items) && (
-                          <div className="mt-2 space-y-2">
-                            {b.items.map((it: any, idx2: number) => (
-                              <div key={it.id || idx2}>
-                                {it.kind === 'markdown' && (
-                                  <div className="whitespace-pre-wrap">{it.content || ''}</div>
-                                )}
-                                {it.kind === 'text' && (
-                                  <div>
-                                    {(() => {
-                                      const text = it.content || '';
-                                      const lvl = it.textHeadingLevel;
-                                      if (!lvl) return <div className={it.textFontSize || ''}><div className="whitespace-pre-wrap">{text}</div></div>;
-                                      const Tag: any = `h${lvl}`;
-                                      const sizeClass = it.textFontSize || '';
-                                      return <Tag className={['mt-0', sizeClass].filter(Boolean).join(' ')}>{text}</Tag>;
-                                    })()}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label>Rubric Criteria</Label>
+                                <Button size="sm" onClick={() => {
+                                  const list = Array.isArray(b.rubric) ? [...b.rubric] : [];
+                                  list.push({ id: `rb-${Date.now()}`, description: '', maxPoints: 1, weight: 1 });
+                                  updateBlock(m.id, b.id, { rubric: list });
+                                }}>Add Criterion</Button>
+                              </div>
+                              <div className="space-y-2">
+                                {(Array.isArray(b.rubric) ? b.rubric : []).map((rc: any, ri: number) => (
+                                  <div key={rc.id || ri} className="grid grid-cols-1 md:grid-cols-6 gap-2 border rounded p-2">
+                                    <div className="md:col-span-3">
+                                      <Label>Description</Label>
+                                      <Input value={rc.description || ''} onChange={(e) => {
+                                        const list = Array.isArray(b.rubric) ? [...b.rubric] : [];
+                                        list[ri] = { ...rc, description: e.target.value };
+                                        updateBlock(m.id, b.id, { rubric: list });
+                                      }} />
+                                    </div>
+                                    <div>
+                                      <Label>Max Points</Label>
+                                      <Input type="number" value={rc.maxPoints ?? 1} onChange={(e) => {
+                                        const list = Array.isArray(b.rubric) ? [...b.rubric] : [];
+                                        list[ri] = { ...rc, maxPoints: Math.max(0, Number(e.target.value) || 0) };
+                                        updateBlock(m.id, b.id, { rubric: list });
+                                      }} />
+                                    </div>
+                                    <div>
+                                      <Label>Weight</Label>
+                                      <Input type="number" value={rc.weight ?? 1} onChange={(e) => {
+                                        const list = Array.isArray(b.rubric) ? [...b.rubric] : [];
+                                        list[ri] = { ...rc, weight: Math.max(0, Number(e.target.value) || 0) };
+                                        updateBlock(m.id, b.id, { rubric: list });
+                                      }} />
+                                    </div>
+                                    <div className="md:col-span-2 flex items-end justify-end">
+                                      <Button variant="destructive" size="sm" onClick={() => {
+                                        const list = (b.rubric || []).filter((_: any, idx: number) => idx !== ri);
+                                        updateBlock(m.id, b.id, { rubric: list });
+                                      }}>Remove</Button>
+                                    </div>
                                   </div>
-                                )}
-                                {it.kind === 'bullets' && Array.isArray(it.bullets) && (
-                                  <ul className="ml-5 list-disc space-y-1">{it.bullets.map((x: string, bi: number) => (<li key={bi}>{x}</li>))}</ul>
-                                )}
-                                {it.kind === 'image' && it.imageUrl && (
-                                  <figure>
-                                    <img src={it.imageUrl} alt={it.alt || ''} className="max-h-64 rounded border object-contain" />
-                                    {(it.caption || it.alt) && (<figcaption className="text-xs text-muted-foreground mt-1">{it.caption || it.alt}</figcaption>)}
-                                  </figure>
-                                )}
-                                {it.kind === 'video' && it.videoUrl && (
-                                  <div className="aspect-video w-full"><iframe src={it.videoUrl} className="w-full h-full rounded" allowFullScreen /></div>
-                                )}
-                                {it.kind === 'code' && it.codeContent && (
-                                  <pre className="bg-muted p-3 rounded overflow-auto" style={{ fontSize: (it.codeFontSize ? Number(it.codeFontSize) : 12) + 'px' }}><code className={`language-${it.codeLanguage || 'javascript'}`}>{it.codeContent}</code></pre>
-                                )}
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                        {b.type === 'code' && (
-                          <div className="mt-2">
-                            <Label>Code</Label>
-                            <Textarea value={b.codeContent || ''} onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value })} className="font-mono" style={{ fontSize: (b.codeFontSize ? Number(b.codeFontSize) : 12) + 'px' }} />
-                            <div className="flex items-center justify-between mt-2">
-                              <div>
-                                <Select value={b.codeLanguage || 'javascript'} onValueChange={(v) => updateBlock(m.id, b.id, { codeLanguage: v })}>
-                                  <SelectTrigger><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="javascript">JavaScript</SelectItem>
-                                    <SelectItem value="python">Python</SelectItem>
-                                    <SelectItem value="java">Java</SelectItem>
-                                    <SelectItem value="typescript">TypeScript</SelectItem>
-                                    <SelectItem value="c">C</SelectItem>
-                                    <SelectItem value="cpp">C++</SelectItem>
-                                    <SelectItem value="go">Go</SelectItem>
-                                    <SelectItem value="ruby">Ruby</SelectItem>
-                                    <SelectItem value="html">HTML</SelectItem>
-                                    <SelectItem value="css">CSS</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label>Attachments</Label>
+                                <Button size="sm" onClick={() => {
+                                  const list = Array.isArray(b.attachments) ? [...b.attachments] : [];
+                                  list.push({ id: `att-${Date.now()}`, name: '', url: '' });
+                                  updateBlock(m.id, b.id, { attachments: list });
+                                }}>Add Attachment</Button>
                               </div>
-                              <div>
-                                <Select value={b.codeFontSize || '12'} onValueChange={(v) => updateBlock(m.id, b.id, { codeFontSize: v })}>
-                                  <SelectTrigger><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="10">10px</SelectItem>
-                                    <SelectItem value="12">12px</SelectItem>
-                                    <SelectItem value="14">14px</SelectItem>
-                                    <SelectItem value="16">16px</SelectItem>
-                                    <SelectItem value="18">18px</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                              <div className="space-y-2">
+                                {(Array.isArray(b.attachments) ? b.attachments : []).map((at: any, ai: number) => (
+                                  <div key={at.id || ai} className="grid grid-cols-1 md:grid-cols-6 gap-2 border rounded p-2">
+                                    <div className="md:col-span-2">
+                                      <Label>Name</Label>
+                                      <Input value={at.name || ''} onChange={(e) => {
+                                        const list = Array.isArray(b.attachments) ? [...b.attachments] : [];
+                                        list[ai] = { ...at, name: e.target.value };
+                                        updateBlock(m.id, b.id, { attachments: list });
+                                      }} />
+                                    </div>
+                                    <div className="md:col-span-3">
+                                      <Label>URL</Label>
+                                      <Input value={at.url || ''} onChange={(e) => {
+                                        const list = Array.isArray(b.attachments) ? [...b.attachments] : [];
+                                        list[ai] = { ...at, url: e.target.value };
+                                        updateBlock(m.id, b.id, { attachments: list });
+                                      }} />
+                                    </div>
+                                    <div className="flex items-end">
+                                      <Button variant="destructive" size="sm" onClick={() => {
+                                        const list = (b.attachments || []).filter((_: any, idx: number) => idx !== ai);
+                                        updateBlock(m.id, b.id, { attachments: list });
+                                      }}>Remove</Button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
                         )}
-                        {b.type === 'video' && b.videoUrl && (
-                          <div className="mt-2 text-xs text-muted-foreground">Video: {b.videoUrl}{b.videoDuration ? ` • ${b.videoDuration}s` : ''}</div>
+                        {b.type === 'composite' && (
+                          <div className="mt-2 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label>Composite Items</Label>
+                              <Button size="sm" onClick={() => {
+                                const items = Array.isArray(b.items) ? [...b.items] : [];
+                                items.push({ id: `ci-${Date.now()}`, kind: 'markdown', content: 'New item' });
+                                updateBlock(m.id, b.id, { items });
+                              }}>Add Item</Button>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => collapseAllCompositeItems({ modules: [m] }, true)}>Collapse all items</Button>
+                              <Button size="sm" variant="outline" onClick={() => collapseAllCompositeItems({ modules: [m] }, false)}>Expand all items</Button>
+                            </div>
+                            <div className="space-y-2">
+                              {(Array.isArray(b.items) ? b.items : []).map((it: any, ii: number) => (
+                                <div key={it.id || ii} className="glass-card space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-xs">Kind</Label>
+                                    <Select value={it.kind || 'markdown'} onValueChange={(v) => {
+                                      const items = [...(b.items || [])];
+                                      items[ii] = { ...it, kind: v };
+                                      updateBlock(m.id, b.id, { items });
+                                    }}>
+                                      <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="markdown">Markdown</SelectItem>
+                                        <SelectItem value="text">Text</SelectItem>
+                                        <SelectItem value="video">Video</SelectItem>
+                                        <SelectItem value="bullets">Bullets</SelectItem>
+                                        <SelectItem value="code">Code</SelectItem>
+                                        <SelectItem value="image">Image</SelectItem>
+                                        <SelectItem value="composite">Composite</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <div className="ml-auto flex gap-2">
+                                      <Button variant="outline" size="sm" onClick={() => setCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`, !isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`))}>{isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) ? 'Expand' : 'Collapse'}</Button>
+                                      <Button variant="outline" size="sm" onClick={() => {
+                                        if (ii === 0) return;
+                                        const items = [...(b.items || [])];
+                                        const tmp = items[ii - 1]; items[ii - 1] = items[ii]; items[ii] = tmp;
+                                        updateBlock(m.id, b.id, { items });
+                                      }}>Up</Button>
+                                      <Button variant="outline" size="sm" onClick={() => {
+                                        const items = [...(b.items || [])];
+                                        if (ii >= items.length - 1) return;
+                                        const tmp = items[ii + 1]; items[ii + 1] = items[ii]; items[ii] = tmp;
+                                        updateBlock(m.id, b.id, { items });
+                                      }}>Down</Button>
+                                      <Button variant="destructive" size="sm" onClick={() => {
+                                        const items = (b.items || []).filter((_: any, idx: number) => idx !== ii);
+                                        updateBlock(m.id, b.id, { items });
+                                      }}>Remove</Button>
+                                    </div>
+                                  </div>
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'markdown' && (
+                                    <div className="space-y-2">
+                                      <div>
+                                        <Label>Content</Label>
+                                        <Textarea value={it.content || ''} onChange={(e) => {
+                                          const items = [...(b.items || [])];
+                                          items[ii] = { ...it, content: e.target.value };
+                                          updateBlock(m.id, b.id, { items });
+                                        }} />
+                                      </div>
+                                      <div className="border rounded p-2 bg-muted/30">
+                                        <div className="text-xs text-muted-foreground mb-1">Preview</div>
+                                        <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{it.content || ''}</ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'text' && (
+                                    <div className="space-y-2">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        <div className="md:col-span-3">
+                                          <Label>Text (Markdown supported)</Label>
+                                          <Textarea value={it.content || ''} onChange={(e) => {
+                                            const items = [...(b.items || [])];
+                                            items[ii] = { ...it, content: e.target.value };
+                                            updateBlock(m.id, b.id, { items });
+                                          }} />
+                                        </div>
+                                        <div>
+                                          <Label>Heading Level</Label>
+                                          <Input type="number" value={it.textHeadingLevel || 0} onChange={(e) => {
+                                            const items = [...(b.items || [])];
+                                            items[ii] = { ...it, textHeadingLevel: Number(e.target.value) };
+                                            updateBlock(m.id, b.id, { items });
+                                          }} />
+                                        </div>
+                                        <div>
+                                          <Label>Font Size (px)</Label>
+                                          <Input value={it.textFontSize || ''} onChange={(e) => {
+                                            const items = [...(b.items || [])];
+                                            items[ii] = { ...it, textFontSize: e.target.value };
+                                            updateBlock(m.id, b.id, { items });
+                                          }} />
+                                          <div className="flex gap-1 mt-1">
+                                            {[
+                                              { k: 'sm', v: '14px' },
+                                              { k: 'md', v: '16px' },
+                                              { k: 'lg', v: '18px' },
+                                              { k: 'xl', v: '24px' },
+                                            ].map((p) => (
+                                              <Button key={p.k} type="button" size="sm" variant={it.textFontSize === p.v ? 'default' : 'outline'} onClick={() => {
+                                                const items = [...(b.items || [])];
+                                                items[ii] = { ...it, textFontSize: p.v };
+                                                updateBlock(m.id, b.id, { items });
+                                              }}>{p.k}</Button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="border rounded p-2 bg-muted/30">
+                                        <div className="text-xs text-muted-foreground mb-1">Preview</div>
+                                        {(() => {
+                                          const style: any = {};
+                                          if (it.textFontSize) style.fontSize = it.textFontSize;
+                                          const lvl = Number(it.textHeadingLevel) || 0;
+                                          const content = <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{it.content || ''}</ReactMarkdown>;
+                                          if (lvl >= 1 && lvl <= 6) {
+                                            const Tag = (`h${lvl}` as any);
+                                            return <Tag style={style}>{content}</Tag>;
+                                          }
+                                          return <div style={style}>{content}</div>;
+                                        })()}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'video' && (
+                                    <div>
+                                      <Label>Video URL</Label>
+                                      <Input value={it.videoUrl || ''} onChange={(e) => {
+                                        const items = [...(b.items || [])];
+                                        items[ii] = { ...it, videoUrl: e.target.value };
+                                        updateBlock(m.id, b.id, { items });
+                                      }} />
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'bullets' && (
+                                    <div>
+                                      <Label>List (newline = new bullet)</Label>
+                                      <Textarea value={(it.bullets || []).join("\n")} onChange={(e) => {
+                                        const lines = (e.target.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                                        const items = [...(b.items || [])];
+                                        items[ii] = { ...it, bullets: lines };
+                                        updateBlock(m.id, b.id, { items });
+                                      }} />
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'code' && (
+                                    <div className="space-y-2">
+                                      <div className="rounded-md overflow-hidden border bg-[#1e1e1e]">
+                                        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                                          <div className="flex items-center gap-2">
+                                            <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
+                                            <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
+                                            <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+                                          </div>
+                                          <div className="flex items-center gap-2 text-gray-200">
+                                            <Label className="text-xs text-gray-400">Language</Label>
+                                            <Select value={it.codeLanguage || 'javascript'} onValueChange={(v) => {
+                                              const items = [...(b.items || [])];
+                                              items[ii] = { ...it, codeLanguage: v };
+                                              updateBlock(m.id, b.id, { items });
+                                            }}>
+                                              <SelectTrigger className="h-7 w-40 bg-[#2a2a2a] text-gray-100 border-white/10"><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="javascript">JavaScript</SelectItem>
+                                                <SelectItem value="typescript">TypeScript</SelectItem>
+                                                <SelectItem value="python">Python</SelectItem>
+                                                <SelectItem value="java">Java</SelectItem>
+                                                <SelectItem value="html">HTML</SelectItem>
+                                                <SelectItem value="css">CSS</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            <div className="text-xs text-gray-400 ml-2">
+                                              {((it.codeContent || '').split(/\r?\n/).length)} lines • {(it.codeContent || '').length} chars
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="p-3">
+                                          <Textarea value={it.codeContent || ''} onChange={(e) => {
+                                            const items = [...(b.items || [])];
+                                            items[ii] = { ...it, codeContent: e.target.value };
+                                            updateBlock(m.id, b.id, { items });
+                                          }} className="font-mono bg-[#1e1e1e] text-gray-100 border-none outline-none min-h-40" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'image' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                      <div className="md:col-span-2">
+                                        <Label>Image URL</Label>
+                                        <Input value={it.imageUrl || ''} onChange={(e) => {
+                                          const items = [...(b.items || [])];
+                                          items[ii] = { ...it, imageUrl: e.target.value };
+                                          updateBlock(m.id, b.id, { items });
+                                        }} />
+                                      </div>
+                                      <div>
+                                        <Label>Alt Text</Label>
+                                        <Input value={it.alt || ''} onChange={(e) => {
+                                          const items = [...(b.items || [])];
+                                          items[ii] = { ...it, alt: e.target.value };
+                                          updateBlock(m.id, b.id, { items });
+                                        }} />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'composite' && (
+                                    <div className="mt-2 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label>Nested Items</Label>
+                                        <Button size="sm" onClick={() => {
+                                          const outer = [...(b.items || [])];
+                                          const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                          nested.push({ id: `ci-${Date.now()}`, kind: 'markdown', content: 'Nested item' });
+                                          outer[ii] = { ...it, items: nested };
+                                          updateBlock(m.id, b.id, { items: outer });
+                                        }}>Add Nested Item</Button>
+                                      </div>
+                                      <div className="space-y-2">
+                                        {(Array.isArray(it.items) ? it.items : []).map((nit: any, ni: number) => (
+                                          <div key={nit.id || ni} className="glass-card space-y-2">
+                                            <div className="flex items-center gap-2">
+                                              <Label className="text-xs">Kind</Label>
+                                              <Select value={nit.kind || 'markdown'} onValueChange={(v) => {
+                                                const outer = [...(b.items || [])];
+                                                const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                nested[ni] = { ...nit, kind: v };
+                                                outer[ii] = { ...it, items: nested };
+                                                updateBlock(m.id, b.id, { items: outer });
+                                              }}>
+                                                <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="markdown">Markdown</SelectItem>
+                                                  <SelectItem value="text">Text</SelectItem>
+                                                  <SelectItem value="image">Image</SelectItem>
+                                                  <SelectItem value="video">Video</SelectItem>
+                                                  <SelectItem value="bullets">Bullets</SelectItem>
+                                                  <SelectItem value="code">Code</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                              <div className="ml-auto flex gap-2">
+                                                <Button variant="outline" size="sm" onClick={() => setCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`, !isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`))}>{isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) ? 'Expand' : 'Collapse'}</Button>
+                                                <Button variant="outline" size="sm" onClick={() => {
+                                                  if (ni === 0) return;
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  const tmp = nested[ni - 1]; nested[ni - 1] = nested[ni]; nested[ni] = tmp;
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }}>Up</Button>
+                                                <Button variant="outline" size="sm" onClick={() => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  if (ni >= nested.length - 1) return;
+                                                  const tmp = nested[ni + 1]; nested[ni + 1] = nested[ni]; nested[ni] = tmp;
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }}>Down</Button>
+                                                <Button variant="destructive" size="sm" onClick={() => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = (it.items || []).filter((_: any, idx: number) => idx !== ni);
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }}>Remove</Button>
+                                              </div>
+                                            </div>
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'markdown' && (
+                                              <div className="space-y-2">
+                                                <Label>Content</Label>
+                                                <Textarea value={nit.content || ''} onChange={(e) => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, content: e.target.value };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                                <div className="border rounded p-2 bg-muted/30">
+                                                  <div className="text-xs text-muted-foreground mb-1">Preview</div>
+                                                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{nit.content || ''}</ReactMarkdown>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {nit.kind === 'code' && (
+                                              <div className="space-y-2">
+                                                <div className="rounded-md overflow-hidden border bg-[#1e1e1e]">
+                                                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
+                                                      <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
+                                                      <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-gray-200">
+                                                      <Label className="text-xs text-gray-400">Language</Label>
+                                                      <Select value={nit.codeLanguage || 'javascript'} onValueChange={(v) => {
+                                                        const outer = [...(b.items || [])];
+                                                        const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                        nested[ni] = { ...nit, codeLanguage: v };
+                                                        outer[ii] = { ...it, items: nested };
+                                                        updateBlock(m.id, b.id, { items: outer });
+                                                      }}>
+                                                        <SelectTrigger className="h-7 w-40 bg-[#2a2a2a] text-gray-100 border-white/10"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                          <SelectItem value="javascript">JavaScript</SelectItem>
+                                                          <SelectItem value="typescript">TypeScript</SelectItem>
+                                                          <SelectItem value="python">Python</SelectItem>
+                                                          <SelectItem value="java">Java</SelectItem>
+                                                          <SelectItem value="html">HTML</SelectItem>
+                                                          <SelectItem value="css">CSS</SelectItem>
+                                                        </SelectContent>
+                                                      </Select>
+                                                      <div className="text-xs text-gray-400 ml-2">
+                                                        {((nit.codeContent || '').split(/\r?\n/).length)} lines • {(nit.codeContent || '').length} chars
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                  <div className="p-3">
+                                                    <Textarea value={nit.codeContent || ''} onChange={(e) => {
+                                                      const outer = [...(b.items || [])];
+                                                      const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                      nested[ni] = { ...nit, codeContent: e.target.value };
+                                                      outer[ii] = { ...it, items: nested };
+                                                      updateBlock(m.id, b.id, { items: outer });
+                                                    }} className="font-mono bg-[#1e1e1e] text-gray-100 border-none outline-none min-h-40" />
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {nit.kind === 'video' && (
+                                              <div>
+                                                <Label>Video URL</Label>
+                                                <Input value={nit.videoUrl || ''} onChange={(e) => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, videoUrl: e.target.value };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                              </div>
+                                            )}
+                                            {nit.kind === 'bullets' && (
+                                              <div>
+                                                <Label>List (newline = new bullet)</Label>
+                                                <Textarea value={(nit.bullets || []).join('\n')} onChange={(e) => {
+                                                  const lines = (e.target.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, bullets: lines };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                              </div>
+                                            )}
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'text' && (
+                                              <div className="space-y-2">
+                                                <Label>Text (Markdown supported)</Label>
+                                                <Textarea value={nit.content || ''} onChange={(e) => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, content: e.target.value };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                                <div className="border rounded p-2 bg-muted/30">
+                                                  <div className="text-xs text-muted-foreground mb-1">Preview</div>
+                                                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{nit.content || ''}</ReactMarkdown>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'image' && (
+                                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                <div className="md:col-span-2">
+                                                  <Label>Image URL</Label>
+                                                  <Input value={nit.imageUrl || ''} onChange={(e) => {
+                                                    const outer = [...(b.items || [])];
+                                                    const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                    nested[ni] = { ...nit, imageUrl: e.target.value };
+                                                    outer[ii] = { ...it, items: nested };
+                                                    updateBlock(m.id, b.id, { items: outer });
+                                                  }} />
+                                                </div>
+                                                <div>
+                                                  <Label>Alt</Label>
+                                                  <Input value={nit.alt || ''} onChange={(e) => {
+                                                    const outer = [...(b.items || [])];
+                                                    const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                    nested[ni] = { ...nit, alt: e.target.value };
+                                                    outer[ii] = { ...it, items: nested };
+                                                    updateBlock(m.id, b.id, { items: outer });
+                                                  }} />
+                                                </div>
+                                              </div>
+                                            )}
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'code' && (
+                                              <div className="space-y-2">
+                                                <div>
+                                                  <Label>Language</Label>
+                                                  <Select value={nit.codeLanguage || 'javascript'} onValueChange={(v) => {
+                                                    const outer = [...(b.items || [])];
+                                                    const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                    nested[ni] = { ...nit, codeLanguage: v };
+                                                    outer[ii] = { ...it, items: nested };
+                                                    updateBlock(m.id, b.id, { items: outer });
+                                                  }}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                      <SelectItem value="javascript">JavaScript</SelectItem>
+                                                      <SelectItem value="typescript">TypeScript</SelectItem>
+                                                      <SelectItem value="python">Python</SelectItem>
+                                                      <SelectItem value="java">Java</SelectItem>
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                                <div>
+                                                  <Label>Code</Label>
+                                                  <Textarea value={nit.codeContent || ''} onChange={(e) => {
+                                                    const outer = [...(b.items || [])];
+                                                    const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                    nested[ni] = { ...nit, codeContent: e.target.value };
+                                                    outer[ii] = { ...it, items: nested };
+                                                    updateBlock(m.id, b.id, { items: outer });
+                                                  }} className="font-mono" />
+                                                </div>
+                                              </div>
+                                            )}
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'video' && (
+                                              <div>
+                                                <Label>Video URL</Label>
+                                                <Input value={nit.videoUrl || ''} onChange={(e) => {
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, videoUrl: e.target.value };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                              </div>
+                                            )}
+                                            {!isCollapsed(`compNested:${m.id}:${b.id}:${it.id || ''}:${nit.id || ''}`) && nit.kind === 'bullets' && (
+                                              <div>
+                                                <Label>List (newline = new bullet)</Label>
+                                                <Textarea value={(nit.bullets || []).join('\n')} onChange={(e) => {
+                                                  const lines = (e.target.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                                                  const outer = [...(b.items || [])];
+                                                  const nested = Array.isArray(it.items) ? [...it.items] : [];
+                                                  nested[ni] = { ...nit, bullets: lines };
+                                                  outer[ii] = { ...it, items: nested };
+                                                  updateBlock(m.id, b.id, { items: outer });
+                                                }} />
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                         {b.type === 'quiz' && (
-                          <div className="mt-2 text-xs text-muted-foreground">Quiz • {b.quiz?.questions?.length || 0} questions</div>
+                          <div className="mt-2 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                              <div>
+                                <Label>Passing Score (%)</Label>
+                                <Input type="number" value={b.quiz?.passingScore ?? 70} onChange={(e) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || { questions: [], allowRetakes: true }), passingScore: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } })} />
+                              </div>
+                              <div>
+                                <Label>Max Attempts</Label>
+                                <Input type="number" value={b.quiz?.maxAttempts ?? 0} onChange={(e) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || { questions: [], allowRetakes: true }), maxAttempts: Math.max(0, Number(e.target.value) || 0) } })} />
+                              </div>
+                              <div>
+                                <Label>Time Limit (ms)</Label>
+                                <Input type="number" value={b.quiz?.timeLimit ?? 0} onChange={(e) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || { questions: [], allowRetakes: true }), timeLimit: Math.max(0, Number(e.target.value) || 0) } })} />
+                              </div>
+                              <div className="flex items-end gap-2">
+                                <Switch checked={!!(b.quiz?.allowRetakes ?? true)} onCheckedChange={(v) => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || { questions: [] }), allowRetakes: !!v } })} />
+                                <Label className="cursor-pointer" onClick={() => updateBlock(m.id, b.id, { quiz: { ...(b.quiz || { questions: [] }), allowRetakes: !(b.quiz?.allowRetakes ?? true) } })}>Allow Retakes</Label>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Label>Questions</Label>
+                              <Button size="sm" onClick={() => {
+                                const q = (b.quiz?.questions || []);
+                                const next = [...q, { id: `q-${Date.now()}`, text: '', options: ['', ''], correctIndex: 0 }];
+                                updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: next } });
+                              }}>Add Question</Button>
+                            </div>
+                            <div className="space-y-3">
+                              {(b.quiz?.questions || []).map((q: any, qi: number) => (
+                                <div key={q.id || qi} className="border rounded p-3 space-y-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                                    <div className="md:col-span-5">
+                                      <Label>Question</Label>
+                                      <Input value={q.text || ''} onChange={(e) => {
+                                        const qs = [...(b.quiz?.questions || [])];
+                                        qs[qi] = { ...q, text: e.target.value };
+                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                      }} />
+                                    </div>
+                                    <div className="flex items-end">
+                                      <Button variant="destructive" size="sm" onClick={() => {
+                                        const qs = (b.quiz?.questions || []).filter((_: any, idx: number) => idx !== qi);
+                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                      }}>Remove</Button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Options</Label>
+                                    <div className="space-y-2">
+                                      {(q.options || []).map((opt: string, oi: number) => (
+                                        <div key={oi} className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                                          <div className="md:col-span-5">
+                                            <Input value={opt} onChange={(e) => {
+                                              const qs = [...(b.quiz?.questions || [])];
+                                              const arr = [...(q.options || [])];
+                                              arr[oi] = e.target.value;
+                                              qs[qi] = { ...q, options: arr };
+                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                            }} />
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <input aria-label="Mark correct" type="radio" name={`correct-${qi}`} checked={q.correctIndex === oi} onChange={() => {
+                                              const qs = [...(b.quiz?.questions || [])];
+                                              qs[qi] = { ...q, correctIndex: oi };
+                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                            }} />
+                                            <Button size="sm" variant="outline" onClick={() => {
+                                              const qs = [...(b.quiz?.questions || [])];
+                                              const arr = (q.options || []).filter((_: any, idx: number) => idx !== oi);
+                                              const newCorrect = q.correctIndex > oi ? q.correctIndex - 1 : q.correctIndex === oi ? 0 : q.correctIndex;
+                                              qs[qi] = { ...q, options: arr, correctIndex: Math.max(0, Math.min(newCorrect, arr.length - 1)) };
+                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                            }}>Remove</Button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      <Button size="sm" onClick={() => {
+                                        const qs = [...(b.quiz?.questions || [])];
+                                        const arr = [...(q.options || [])];
+                                        arr.push('');
+                                        qs[qi] = { ...q, options: arr };
+                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                      }}>Add Option</Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setCourse((c: any) => {
+                              const mods = [...(c.modules || [])].map((mm: any) => (mm.id === m.id ? {
+                                ...mm,
+                                contentBlocks: [...(mm.contentBlocks || []), { ...structuredClone(b), id: `b-${Date.now()}`, displayIndex: '', order: (mm.contentBlocks?.length || 0) + 1 }],
+                              } : mm));
+                              
+                            });
+                          }}>Duplicate</Button>
+                          <Button variant="destructive" size="sm" onClick={() => removeBlock(m.id, b.id)}>Remove Block</Button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-          <Card>
-            <CardHeader><CardTitle>Preview (Minimal)</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <div className="text-lg font-medium">{course.title}</div>
-                <div className="text-sm text-muted-foreground">{course.description}</div>
+            </CardContent>
+          </Card>
+        </div>
+        {/* Right column: Tools Panel */}
+        <div className="space-y-6">
+          <Card className="glass-card">
+            <CardHeader><CardTitle>Tools</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="admin" size="sm" onClick={() => setValidation({ checkedAt: Date.now(), issues: buildValidation(course).map(i => `${i.severity.toUpperCase()}: ${i.message}`), items: buildValidation(course) })}>Run Validation</Button>
+                <Button variant="outline" size="sm" onClick={() => collapseAllCompositeItems(course, true)}>Collapse All Composite</Button>
+                <Button variant="outline" size="sm" onClick={() => collapseAllCompositeItems(course, false)}>Expand All Composite</Button>
+                <Button size="sm" onClick={() => {
+                  const blob = new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = `${(course.title || 'course').toLowerCase().replace(/\s+/g, '-')}.json`;
+                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}>Export Course JSON</Button>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input type="file" accept="application/json" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader();
+                    reader.onload = () => {
+                      try {
+                        const json = JSON.parse(String(reader.result) || '{}');
+                        if (json && typeof json === 'object') {
+                          setCourse(json);
+                          ignoreNextAutoSave.current = true;
+                        }
+                      } catch {}
+                    };
+                    reader.readAsText(file);
+                    e.currentTarget.value = '';
+                  }} />
+                  <Button size="sm" variant="outline">Import Course JSON</Button>
+                </label>
               </div>
-              <Separator />
-              <div className="space-y-2">
-                {(course.modules || []).sort((a: any, b: any) => a.order - b.order).map((m: any) => (
-                  <div key={m.id}>
-                    <div className="font-medium">{m.displayIndex ? `${m.displayIndex} ` : ''}{m.title}</div>
-                    <ul className="ml-4 list-disc">
-                      {(m.contentBlocks || []).sort((a: any, b: any) => a.order - b.order).map((b: any) => (
-                        <li key={b.id} className="text-sm">
-                          <span className="font-mono">{b.displayIndex || ''}</span> – <span className="uppercase text-xs">{b.type}</span> {b.title || ''}
-                          {b.type === 'image' && b.imageUrl ? ` • img` : ''}
-                          {b.type === 'bullets' && (b.bullets?.length ? ` • ${b.bullets.length} bullets` : '')}
-                          {typeof b.estimatedMinutes === 'number' ? ` • ~${b.estimatedMinutes}m` : ''}
-                        </li>
-                      ))}
-                    </ul>
+
+              {validation && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Checked {validation?.checkedAt ? new Date(validation.checkedAt).toLocaleTimeString() : '-'}</div>
+                  <div className="rounded-lg border bg-card p-2 max-h-60 overflow-auto text-sm">
+                    {(validation.items?.length ?? 0) === 0 ? (
+                      <div className="text-muted-foreground">No issues found.</div>
+                    ) : (
+                      <ul className="list-disc ml-5 space-y-1">
+                        {(validation.items || []).map((it, i) => (
+                          <li key={i} className={it.severity === 'error' ? 'text-red-600' : it.severity === 'warning' ? 'text-amber-600' : 'text-green-600'}>
+                            {it.message}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

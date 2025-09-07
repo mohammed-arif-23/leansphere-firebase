@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,9 +19,14 @@ type Props = {
 };
 
 export default function CodeRunnerClient({ language, starterCode, mode, testCases, courseId, moduleId, contentBlockId, onPass }: Props) {
+  const storageKeyBase = useMemo(() => {
+    const base = `runner:${courseId || 'c'}:${moduleId || 'm'}:${contentBlockId || 'b'}`;
+    return base;
+  }, [courseId, moduleId, contentBlockId]);
   const [code, setCode] = useState(starterCode || '');
   const [stdin, setStdin] = useState('');
   const [lang, setLang] = useState<Props['language']>(language || 'javascript');
+  const saveTimer = useRef<number | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
 
@@ -55,6 +60,29 @@ export default function CodeRunnerClient({ language, starterCode, mode, testCase
       setRunning(false);
     }
   };
+
+  // Restore persisted state
+  useEffect(() => {
+    try {
+      const savedLang = localStorage.getItem(storageKeyBase + ':lang');
+      const savedCode = localStorage.getItem(storageKeyBase + ':code');
+      if (savedLang) setLang(savedLang as Props['language']);
+      if (savedCode && !starterCode) setCode(savedCode);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKeyBase]);
+
+  // Persist changes (debounced)
+  useEffect(() => {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      try {
+        localStorage.setItem(storageKeyBase + ':lang', String(lang));
+        localStorage.setItem(storageKeyBase + ':code', code);
+      } catch {}
+    }, 400);
+    return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); };
+  }, [code, lang, storageKeyBase]);
 
   return (
     <Card className="bg-white">

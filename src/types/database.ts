@@ -49,6 +49,9 @@ export interface Quiz {
   timeLimit?: number; // in minutes
   allowRetakes: boolean;
   maxAttempts?: number;
+  // Proctoring and adaptivity flags (optional)
+  proctored?: boolean;
+  adaptive?: boolean;
 }
 
 // Content block interfaces

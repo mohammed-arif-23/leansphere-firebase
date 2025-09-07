@@ -1,40 +1,32 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import type { Course, Module } from '@/types';
-import { Loader2 } from 'lucide-react';
+
+type Summary = {
+  success: boolean;
+  data?: {
+    totals: { courses: number; modules: number; users: number; students: number };
+    progress: { totalCompletedModules: number; avgTimePerModuleSeconds: number; avgCompletionPct: number };
+  };
+};
 
 export default function AdminPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(true);
-
-  // Course creation state
-  const [courseTitle, setCourseTitle] = useState('');
-  const [courseDesc, setCourseDesc] = useState('');
-  const [courseLanguage, setCourseLanguage] = useState('');
-  const [courseDifficulty, setCourseDifficulty] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [isSubmittingCourse, setIsSubmittingCourse] = useState(false);
-
-  // Module creation state
-  const [selectedCourseId, setSelectedCourseId] = useState('');
-  const [moduleTitle, setModuleTitle] = useState('');
-  const [moduleType, setModuleType] = useState<Module['type'] | ''>('');
-  const [moduleContent, setModuleContent] = useState('');
-  const [isSubmittingModule, setIsSubmittingModule] = useState(false);
-
-  const { toast } = useToast();
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', email: '', avatarUrl: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', avatarUrl: '' });
 
   useEffect(() => {
-    // Redirect to login if not authenticated
+    // Check auth and then load summary
     (async () => {
       try {
         const me = await fetch('/api/admin/auth/me', { cache: 'no-store', credentials: 'include' });
@@ -42,311 +34,237 @@ export default function AdminPage() {
           window.location.href = '/admin/login?redirect=/admin';
           return;
         }
-        const j = await me.json();
-        if (!j?.success) {
-          window.location.href = '/admin/login?redirect=/admin';
-          return;
-        }
-      } catch {
-        window.location.href = '/admin/login?redirect=/admin';
-        return;
+        const res = await fetch('/api/admin/analytics/summary', { cache: 'no-store', credentials: 'include' });
+        const json: Summary = await res.json();
+        setSummary(json);
+        // Load students
+        const sres = await fetch('/api/admin/students', { cache: 'no-store', credentials: 'include' });
+        const sjson = await sres.json();
+        setStudents(Array.isArray(sjson?.data) ? sjson.data : []);
+      } catch (e) {
+        setSummary(null);
+      } finally {
+        setLoading(false);
+        setLoadingStudents(false);
       }
     })();
+  }, []);
 
-    const fetchCourses = async () => {
-      try {
-        const response = await fetch('/api/admin/courses?page=1&limit=100', { cache: 'no-store', credentials: 'include' });
-        if (!response.ok) throw new Error('Failed to fetch courses');
-        const data = await response.json();
-        setCourses(Array.isArray(data?.data?.items) ? data.data.items : []);
-      } catch (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Could not load courses for module creation.',
-        });
-      } finally {
-        setIsLoadingCourses(false);
-      }
-    };
-    fetchCourses();
-  }, [toast]);
+  const totals = summary?.data?.totals;
+  const prog = summary?.data?.progress;
 
-
-  const handleCourseSubmit = async (e: React.FormEvent) => {
+  async function handleCreateStudent(e: React.FormEvent) {
     e.preventDefault();
-    setIsSubmittingCourse(true);
-
-    const newCourseData: Partial<Course> = {
-      title: courseTitle,
-      description: courseDesc,
-      language: courseLanguage as Course['language'],
-      difficulty: courseDifficulty as Course['difficulty'],
-      estimatedHours: 10, // Placeholder
-      imageUrl: imageUrl || 'https://picsum.photos/600/400',
-    };
-
-    try {
-      const response = await fetch('/api/admin/courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          id: `course-${Date.now()}`,
-          title: newCourseData.title,
-          description: newCourseData.description,
-          language: (newCourseData.language as any) || 'General',
-          difficulty: (newCourseData.difficulty as any) || 'beginner',
-          estimatedHours: newCourseData.estimatedHours || 1,
-          imageUrl: newCourseData.imageUrl,
-          modules: [],
-          tags: [],
-          prerequisites: [],
-          learningObjectives: [],
-          isPublished: false,
-          isActive: true,
-          enrollmentCount: 0,
-          createdBy: 'admin-user',
-          instructors: [],
-          price: 0,
-          currency: 'USD',
-          isFree: true,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create course');
-      }
-
-      const createdCourseResp = await response.json();
-      toast({
-        title: "Success!",
-        description: `Course created.`,
-      });
-      // Reset form
-      setCourseTitle('');
-      setCourseDesc('');
-      setCourseLanguage('');
-      setCourseDifficulty('');
-      setImageUrl('');
-      // Refresh course list from admin API
-      try {
-        const refresh = await fetch('/api/admin/courses?page=1&limit=100', { cache: 'no-store', credentials: 'include' });
-        const refreshJson = await refresh.json();
-        setCourses(Array.isArray(refreshJson?.data?.items) ? refreshJson.data.items : []);
-      } catch {}
-
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Something went wrong.',
-      });
-    } finally {
-      setIsSubmittingCourse(false);
+    const res = await fetch('/api/admin/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(addForm),
+    });
+    if (res.ok) {
+      const reload = await fetch('/api/admin/students', { cache: 'no-store', credentials: 'include' });
+      const j = await reload.json();
+      setStudents(Array.isArray(j?.data) ? j.data : []);
+      setShowAdd(false);
+      setAddForm({ name: '', email: '', avatarUrl: '' });
+      setSummary((prev) => prev && prev.data ? { ...prev, data: { ...prev.data, totals: { ...prev.data.totals, students: (Array.isArray(j?.data) ? j.data.length : 0) } } } : prev);
     }
-  };
+  }
 
-  const handleModuleSubmit = async (e: React.FormEvent) => {
+  function startEdit(s: any) {
+    setEditingId(s.id);
+    setEditForm({ name: s.name || '', email: s.email || '', avatarUrl: s.avatarUrl || '' });
+  }
+
+  async function handleUpdateStudent(e: React.FormEvent) {
     e.preventDefault();
-    setIsSubmittingModule(true);
-
-    try {
-      // Load the selected course
-      const getRes = await fetch(`/api/admin/courses/${encodeURIComponent(selectedCourseId)}`, { credentials: 'include', cache: 'no-store' });
-      if (!getRes.ok) throw new Error('Failed to load course');
-      const getJson = await getRes.json();
-      const course = getJson?.data?.course;
-      if (!course) throw new Error('Course not found');
-
-      const newModuleId = `m-${Date.now()}`;
-      // Build an initial content block from the simple form
-      const initialBlockId = `b-${Date.now()}`;
-      let contentBlock: any = { id: initialBlockId, title: moduleTitle, type: moduleType || 'text', order: 1, content: '', estimatedMinutes: 5 };
-      if (moduleType === 'video') {
-        contentBlock.videoUrl = moduleContent;
-      } else if (moduleType === 'code') {
-        contentBlock.content = moduleContent;
-        contentBlock.codeKind = 'illustrative';
-        contentBlock.codeLanguage = 'javascript';
-      } else if (moduleType === 'quiz') {
-        try { contentBlock.quiz = JSON.parse(moduleContent); } catch { contentBlock.quiz = { questions: [], passingScore: 0, allowRetakes: true }; }
-      } else {
-        contentBlock.content = moduleContent;
-      }
-
-      const newModule: any = {
-        id: newModuleId,
-        title: moduleTitle,
-        description: '',
-        order: (course.modules?.length || 0) + 1,
-        estimatedHours: 1,
-        displayIndex: '',
-        contentBlocks: [contentBlock],
-      };
-
-      const updatedCourse = { ...course, modules: [...(course.modules || []), newModule] };
-      const putRes = await fetch(`/api/admin/courses/${encodeURIComponent(selectedCourseId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(updatedCourse),
-      });
-      if (!putRes.ok) throw new Error('Failed to save module');
-
-      toast({ title: 'Success!', description: `Module "${moduleTitle}" has been created.` });
-      // Reset form
-      setSelectedCourseId('');
-      setModuleTitle('');
-      setModuleType('');
-      setModuleContent('');
-
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Something went wrong while creating module.',
-      });
-    } finally {
-      setIsSubmittingModule(false);
+    if (!editingId) return;
+    const res = await fetch(`/api/admin/students/${encodeURIComponent(editingId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(editForm),
+    });
+    if (res.ok) {
+      const reload = await fetch('/api/admin/students', { cache: 'no-store', credentials: 'include' });
+      const j = await reload.json();
+      setStudents(Array.isArray(j?.data) ? j.data : []);
+      setEditingId(null);
     }
-  };
+  }
 
+  async function handleDeleteStudent(id: string) {
+    if (!confirm('Delete this student?')) return;
+    const res = await fetch(`/api/admin/students/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
+    if (res.ok) {
+      const next = students.filter((s) => s.id !== id);
+      setStudents(next);
+      setSummary((prev) => prev && prev.data ? { ...prev, data: { ...prev.data, totals: { ...prev.data.totals, students: next.length } } } : prev);
+    }
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Admin Dashboard
-        </h1>
-        <p className="mt-2 text-lg text-muted-foreground">
-          Manage courses, modules, and platform content.
-        </p>
+      <header className="mb-6 sm:mb-8">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Student Tracking</h1>
+        <p className="mt-2 text-sm sm:text-base text-muted-foreground">Monitor course progress and student activity.</p>
       </header>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-        {/* Create Course Card */}
+
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Link href="/admin/courses">
+          <Button className="rounded-full">Manage courses</Button>
+        </Link>
+        <Button variant="outline" onClick={() => location.reload()} className="rounded-full">Refresh</Button>
+      </div>
+
+      {/* Students drill-down */}
+      <div className="mt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Students</h2>
+          <Button className="rounded-full" onClick={() => setShowAdd(true)}>Add student</Button>
+        </div>
+        <Card className="rounded-xl">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Email</th>
+                    <th className="px-4 py-3">Completed</th>
+                    <th className="px-4 py-3">Completion %</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingStudents ? (
+                    <tr><td className="px-4 py-4" colSpan={5}>Loading...</td></tr>
+                  ) : (
+                    students.map((s) => (
+                      <tr key={s.id} className="border-t">
+                        <td className="px-4 py-3">
+                          {editingId === s.id ? (
+                            <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                          ) : s.name || '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {editingId === s.id ? (
+                            <Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+                          ) : s.email || '—'}
+                        </td>
+                        <td className="px-4 py-3">{s?.progress?.completedModules ?? 0}</td>
+                        <td className="px-4 py-3">{s?.progress?.completionPercentage ?? 0}%</td>
+                        <td className="px-4 py-3">
+                          {editingId === s.id ? (
+                            <div className="flex gap-2">
+                              <Button size="sm" className="rounded-full" onClick={handleUpdateStudent}>Save</Button>
+                              <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditingId(null)}>Cancel</Button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" className="rounded-full" onClick={() => startEdit(s)}>Edit</Button>
+                              <Button size="sm" variant="destructive" className="rounded-full" onClick={() => handleDeleteStudent(s.id)}>Delete</Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Add student modal (simple inline panel) */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl bg-card border p-5">
+            <h3 className="text-lg font-semibold mb-3">Add student</h3>
+            <form onSubmit={handleCreateStudent} className="space-y-3">
+              <div>
+                <Label htmlFor="add-name">Name</Label>
+                <Input id="add-name" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} required />
+              </div>
+              <div>
+                <Label htmlFor="add-email">Email</Label>
+                <Input id="add-email" type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} required />
+              </div>
+              <div>
+                <Label htmlFor="add-avatar">Avatar URL (optional)</Label>
+                <Input id="add-avatar" value={addForm.avatarUrl} onChange={(e) => setAddForm({ ...addForm, avatarUrl: e.target.value })} />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => setShowAdd(false)}>Cancel</Button>
+                <Button type="submit" className="rounded-full">Create</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Create New Course</CardTitle>
-            <CardDescription>Fill out the form to add a new course to the platform.</CardDescription>
+            <CardTitle className="text-sm">Students</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCourseSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="course-title">Course Title</Label>
-                <Input id="course-title" placeholder="e.g., Advanced JavaScript" value={courseTitle} onChange={e => setCourseTitle(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="course-desc">Course Description</Label>
-                <Textarea id="course-desc" placeholder="A brief summary of the course content." value={courseDesc} onChange={e => setCourseDesc(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="course-lang">Programming Language</Label>
-                <Select value={courseLanguage} onValueChange={setCourseLanguage} required>
-                  <SelectTrigger id="course-lang">
-                    <SelectValue placeholder="Select a language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Java">Java</SelectItem>
-                    <SelectItem value="Python">Python</SelectItem>
-                    <SelectItem value="JavaScript">JavaScript</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="course-difficulty">Difficulty</Label>
-                <Select value={courseDifficulty} onValueChange={setCourseDifficulty} required>
-                  <SelectTrigger id="course-difficulty">
-                    <SelectValue placeholder="Select a difficulty" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="beginner">Beginner</SelectItem>
-                    <SelectItem value="intermediate">Intermediate</SelectItem>
-                    <SelectItem value="advanced">Advanced</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="course-image">Image URL</Label>
-                <Input id="course-image" placeholder="https://picsum.photos/600/400" value={imageUrl} onChange={e => setImageUrl(e.target.value)} />
-              </div>
-              <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmittingCourse}>
-                {isSubmittingCourse ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Creating...</> : 'Create Course'}
-              </Button>
-            </form>
+            <div className="text-2xl font-semibold">{loadingStudents ? '–' : students.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Courses</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{loading ? '–' : (totals?.courses ?? 0)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Modules</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{loading ? '–' : (totals?.modules ?? 0)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Avg completion</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{loading ? '–' : `${prog?.avgCompletionPct ?? 0}%`}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="rounded-xl">
+          <CardHeader>
+            <CardTitle>Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="text-sm text-muted-foreground space-y-2">
+              <li><span className="font-medium text-foreground">Completed modules:</span> {loading ? '–' : (prog?.totalCompletedModules ?? 0)}</li>
+              <li><span className="font-medium text-foreground">Avg time per module:</span> {loading ? '–' : `${prog?.avgTimePerModuleSeconds ?? 0}s`}</li>
+              <li><span className="font-medium text-foreground">Tracked users:</span> {loading ? '–' : (totals?.users ?? 0)}</li>
+            </ul>
           </CardContent>
         </Card>
 
-        {/* Create Module Card */}
-        <Card>
+        <Card className="rounded-xl">
           <CardHeader>
-            <CardTitle>Create New Module</CardTitle>
-            <CardDescription>Add a new module to an existing course.</CardDescription>
+            <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent>
-             {isLoadingCourses ? (
-                <div className="flex items-center justify-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <form onSubmit={handleModuleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="module-course">Course</Label>
-                    <Select value={selectedCourseId} onValueChange={setSelectedCourseId} required>
-                      <SelectTrigger id="module-course">
-                        <SelectValue placeholder="Select a course" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(courses || []).map(course => (
-                          <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="module-title">Module Title</Label>
-                    <Input id="module-title" placeholder="e.g., Introduction to Variables" value={moduleTitle} onChange={e => setModuleTitle(e.target.value)} required />
-                  </div>
-                   <div className="space-y-2">
-                    <Label htmlFor="module-type">Module Type</Label>
-                    <Select value={moduleType} onValueChange={(v) => setModuleType(v as Module['type'] | '')} required>
-                      <SelectTrigger id="module-type">
-                        <SelectValue placeholder="Select a type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">Text</SelectItem>
-                        <SelectItem value="video">Video</SelectItem>
-                        <SelectItem value="code">Code Assignment</SelectItem>
-                        <SelectItem value="quiz">Quiz</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="module-content">Content</Label>
-                    <Textarea 
-                      id="module-content" 
-                      rows={moduleType === 'quiz' ? 10 : 3}
-                      placeholder={
-                        moduleType === 'video' 
-                          ? 'Enter video URL...' 
-                          : moduleType === 'code'
-                          ? 'Enter coding assignment prompt...'
-                          : moduleType === 'quiz'
-                          ? 'Enter quiz questions as a JSON array...'
-                          : 'Enter markdown content...'
-                      }
-                      value={moduleContent} 
-                      onChange={e => setModuleContent(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isSubmittingModule}>
-                     {isSubmittingModule ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Creating...</> : 'Create Module'}
-                  </Button>
-                </form>
-              )}
+            <div className="flex flex-wrap gap-3">
+              <Link href="/admin/courses">
+                <Button className="rounded-full">Go to Course Manager</Button>
+              </Link>
+              <Button variant="outline" className="rounded-full" onClick={() => location.reload()}>Refresh Analytics</Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">Analytics powered by <code>/api/admin/analytics/summary</code>.</p>
           </CardContent>
         </Card>
       </div>

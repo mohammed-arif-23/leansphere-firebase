@@ -63,11 +63,11 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
           <Progress value={progressPercentage} className="h-2" />
           <p className="text-xs text-muted-foreground mt-1">{completedModulesInCourse} / {totalModules} modules</p>
         </div>
-        <Button asChild className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" disabled={isLocked}>
-            <Link href={`/courses/${course.id}`}>
-                {isLocked ? "Locked" : progressPercentage > 0 && progressPercentage < 100 ? 'Continue Learning' : 'Start Course'}
-            </Link>
-        </Button>
+        <Link href={`/courses/${course.id}`}>
+          <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" disabled={isLocked}>
+            {isLocked ? "Locked" : progressPercentage > 0 && progressPercentage < 100 ? 'Continue Learning' : 'Start Course'}
+          </Button>
+        </Link>
       </CardFooter>
     </motion.div>
   );

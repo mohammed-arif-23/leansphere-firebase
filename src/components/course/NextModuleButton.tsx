@@ -17,6 +17,9 @@ type Props = {
 export default function NextModuleButton({ courseId, moduleId, href, disabled, label = 'Next Module' }: Props) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  
+  // Prefetch next route for speed
+  try { router.prefetch?.(href); } catch {}
 
   const goNext = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -34,11 +37,11 @@ export default function NextModuleButton({ courseId, moduleId, href, disabled, l
   };
 
   return (
-    <Button asChild disabled={disabled || loading}>
-      <Link href={href} onClick={goNext}>
+    <Link href={href} prefetch aria-label={label}>
+      <Button disabled={disabled || loading} aria-label={label} onClick={goNext}>
         {label}
         <ArrowRight className="ml-2 h-4 w-4" />
-      </Link>
-    </Button>
+      </Button>
+    </Link>
   );
 }

@@ -254,7 +254,19 @@ export const ProgressService = {
   async getByStudent(studentId: string): Promise<UserProgressType[]> {
     await ensureMongooseConnection();
     const items = await models.UserProgress.find({ studentId }).lean().exec();
-    return items;
+    // Coalesce top-level completedContentBlocks from nested structure if missing
+    return items.map((it: any) => {
+      const nestedCompleted: string[] = [];
+      try {
+        for (const mp of it?.moduleProgress || []) {
+          for (const cp of mp?.contentProgress || []) {
+            if (cp?.status === 'completed' && cp?.contentBlockId) nestedCompleted.push(cp.contentBlockId);
+          }
+        }
+      } catch {}
+      const unique = Array.from(new Set([...(it?.completedContentBlocks || []), ...nestedCompleted]));
+      return { ...it, completedContentBlocks: unique } as UserProgressType;
+    });
   },
 
   async get(studentId: string, courseId: string): Promise<UserProgressType | null> {
@@ -361,7 +373,15 @@ export const ProgressService = {
       ).exec();
     }
 
-    // 5) Fetch updated document (TODO: recompute completion properly)
+    // 5) If status is completed, add to top-level completedContentBlocks (idempotent)
+    if (update.status === 'completed') {
+      await models.UserProgress.updateOne(
+        { studentId, courseId },
+        { $addToSet: { completedContentBlocks: contentBlockId } }
+      ).exec();
+    }
+
+    // 6) Fetch updated document (TODO: recompute completion properly)
     return models.UserProgress.findOne({ studentId, courseId }).lean().exec();
   },
 

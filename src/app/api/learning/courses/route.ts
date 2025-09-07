@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
         language: language.length ? language : undefined,
         difficulty: difficulty.length ? difficulty : undefined,
         tags: tags.length ? tags : undefined,
-        isPublished: isPublished === null ? undefined : isPublished === 'true',
+        // Default to published-only when isPublished is not provided
+        isPublished: isPublished === null ? true : isPublished === 'true',
         isFree: isFree === null ? undefined : isFree === 'true',
         search,
       },

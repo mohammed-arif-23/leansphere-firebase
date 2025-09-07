@@ -25,7 +25,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
   const handleShare = async () => {
     const shareData = {
       title: 'Check out my new achievement!',
-      text: `I just earned the "${achievement.title}" badge on LearnSphere!`,
+      text: `I just earned the "${achievement.title}" badge on dynamIT!`,
       url: window.location.origin,
     };
     

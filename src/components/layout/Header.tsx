@@ -1,100 +1,55 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { GraduationCap, LogOut, Settings, User } from 'lucide-react';
 import Image from 'next/image';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 export default function Header() {
-  const router = useRouter();
-  const [profile, setProfile] = useState<{ name?: string; email?: string } | null>(null);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/me', { cache: 'no-store' });
-        if (!res.ok) return;
-        const json = await res.json();
-        if (active && json?.success) {
-          setProfile({ name: json.data?.user?.name || json.data?.user?.registrationNumber, email: json.data?.user?.email });
-        }
-      } catch {}
-    })();
-    return () => { active = false; };
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const onLogout = useCallback(async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } finally {
-      router.replace('/login');
-    }
-  }, [router]);
-
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="relative h-10 w-[180px]">
-            <Image src="/logo.png" alt="A.V.S. Engineering College" fill className="object-contain" priority />
-          </div>
-        </Link>
-        <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
-          <Link href="/" className="transition-colors hover:text-foreground text-black/70">Dashboard</Link>
-          <Link href="/#courses" className="transition-colors hover:text-foreground text-black/70">Courses</Link>
-          <Link href="/admin" className="transition-colors hover:text-foreground text-black/70">Admin</Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="@shadcn" />
-                  <AvatarFallback>{(profile?.name || 'U').toString().slice(0,1).toUpperCase()}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{profile?.name || 'User'}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{profile?.email || ''}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <Link href="/profile">
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-              </Link>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <button onClick={onLogout} className="w-full text-left">
-                <DropdownMenuItem>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </button>
-            </DropdownMenuContent>
-          </DropdownMenu>
+    <header 
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-500 ease-out",
+        "bg-white border-b border-white/10"
+      )}
+    >
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex h-20 items-center justify-center">
+          {/* Logo Section */}
+          <Link 
+            href="/" 
+            className="flex items-center group transition-all duration-300 ease-out hover:-translate-y-0.5"
+          >
+            <div className="relative h-12 w-[300px] sm:w-[360px] overflow-hidden rounded-xl">
+              <div className="absolute inset-0 bg-white/20 backdrop-blur-sm rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <Image 
+                src="/logo.png" 
+                alt="dynamIT - A.V.S. Engineering College" 
+                fill 
+                sizes="100vw"
+                className="object-contain transition-transform duration-300 group-hover:scale-105" 
+                priority 
+              />
+            </div>
+          </Link>
+
+         
         </div>
       </div>
+
+      {/* Subtle gradient overlay for depth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
     </header>
   );
 }

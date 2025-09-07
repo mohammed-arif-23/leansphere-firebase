@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { ImportExportCourses } from "@/components/admin/ImportExportCourses";
+import { Download, Upload } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then(r => r.json());
 
@@ -19,13 +21,21 @@ export default function AdminCoursesPage() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4">
         <h1 className="text-2xl font-semibold">Courses</h1>
-        <div className="flex items-center gap-2">
-          <Input placeholder="Filter by title" value={filter} onChange={(e) => setFilter(e.target.value)} className="w-60" />
-          <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
-            <Link href="/admin/courses/new">Create Course</Link>
-          </Button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-2">
+            <Input 
+              placeholder="Filter by title" 
+              value={filter} 
+              onChange={(e) => setFilter(e.target.value)} 
+              className="w-full sm:w-60" 
+            />
+            <ImportExportCourses />
+          </div>
+          <Link href="/admin/courses/new">
+            <Button variant="admin">Create Course</Button>
+          </Link>
         </div>
       </div>
       <Separator className="mb-4" />
@@ -38,12 +48,12 @@ export default function AdminCoursesPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg font-medium">{course.title}</CardTitle>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/admin/courses/${encodeURIComponent(course.id)}`}>Edit</Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/courses/${encodeURIComponent(course.id)}`}>Preview</Link>
-                </Button>
+                <Link href={`/admin/courses/${encodeURIComponent(course.id)}`}>
+                  <Button variant="outline" size="sm">Edit</Button>
+                </Link>
+                <Link href={`/courses/${encodeURIComponent(course.id)}`}>
+                  <Button variant="outline" size="sm">Preview</Button>
+                </Link>
               </div>
             </CardHeader>
             <CardContent>

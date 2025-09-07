@@ -1,124 +1,121 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { CourseCard } from '@/components/dashboard/CourseCard';
-import { AchievementCard } from '@/components/dashboard/AchievementCard';
-import { BookOpenCheck, Trophy, CheckCircle } from 'lucide-react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { verifyJWT } from '@/lib/auth';
+import { Card, CardContent } from '@/components/ui/card';
 import { ensureMongooseConnection } from '@/lib/mongodb';
-import { CourseService, ProgressService, AchievementService } from '@/lib/services/database';
+import { CourseService, ProgressService } from '@/lib/services/database';
+import { cookies } from 'next/headers';
+import { verifyJWT } from '@/lib/auth';
 
-export default async function Dashboard() {
+export default async function HomePage() {
+  // Try to detect user (optional)
   const token = (await cookies()).get('auth_token')?.value;
-  if (!token) redirect('/login?redirect=/');
-
   let auth: any = null;
-  try {
-    auth = verifyJWT(token);
-  } catch {
-    redirect('/login?redirect=/');
+  if (token) {
+    try { auth = verifyJWT(token); } catch {}
   }
 
-  await ensureMongooseConnection();
-  const [courseListRaw, progressListRaw, achievementsRaw] = await Promise.all([
-    CourseService.list({ isPublished: true }, { page: 1, limit: 50 }).then((r) => r.items),
-    ProgressService.getByStudent(auth.sub),
-    AchievementService.getForStudent(auth.sub),
-  ]);
-  // Deep-clone to plain JSON to strip ObjectId/Date prototypes
-  const courseList = JSON.parse(JSON.stringify(courseListRaw));
-  const progressList = JSON.parse(JSON.stringify(progressListRaw));
-  const achievements = JSON.parse(JSON.stringify(achievementsRaw));
-
-  const completedModulesCount = progressList.reduce((acc: number, p: any) => acc + (p.completedModules?.length || 0), 0);
-  const totalModulesCount = courseList?.reduce((acc: number, c: any) => acc + (c.modules?.length || 0), 0) || 0;
-  const overallCompletion = totalModulesCount > 0 ? (completedModulesCount / totalModulesCount) * 100 : 0;
+  // Preload minimal data for Resume CTA (if logged in)
+  let nextTarget: { course: any, module: any } | null = null;
+  try {
+    await ensureMongooseConnection();
+    const courseList = await CourseService.list({ isPublished: true }, { page: 1, limit: 50 }).then((r) => r.items);
+    if (auth?.sub) {
+      const progressList = await ProgressService.getByStudent(auth.sub);
+      const completedSet = new Set<string>(progressList.flatMap((p: any) => p.completedModules || []));
+      for (const c of courseList) {
+        const next = (c.modules || []).find((m: any) => !completedSet.has(m.id)) || (c.modules || [])[0];
+        if (next) { nextTarget = { course: c, module: next }; break; }
+      }
+    }
+  } catch {}
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">Welcome back, {auth.name || auth.sub}!</h1>
-        <p className="mt-2 text-lg text-muted-foreground">
-          Continue your learning journey and explore new topics.
-        </p>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <section>
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Courses in Progress</CardTitle>
-                        <BookOpenCheck className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{progressList.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                           Keep up the great work!
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Overall Completion</CardTitle>
-                        <CheckCircle className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{Math.round(overallCompletion)}%</div>
-                         <p className="text-xs text-muted-foreground">
-                           {completedModulesCount} of {totalModulesCount} modules completed
-                        </p>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Achievements Unlocked</CardTitle>
-                        <Trophy className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{achievements.length}</div>
-                         <p className="text-xs text-muted-foreground">
-                           New badges to show off
-                        </p>
-                    </CardContent>
-                </Card>
+    <main>
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+          <div className="max-w-3xl">
+            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight">dynamIT</h1>
+            <p className="mt-4 text-lg sm:text-xl text-muted-foreground">A modern learning platform with adaptive quizzes, projects, proctoring, and rich progress tracking. Built for students, designed for results.</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a href="/courses" className="inline-flex  items-center rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90">Explore Courses</a>
+              {auth?.sub ? (
+                nextTarget ? (
+                  <a href={`/courses/${nextTarget.course.id}/${nextTarget.module.id}`} className="inline-flex border items-center rounded-full px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90">Resume Learning</a>
+                ) : (
+                  <a href="/profile" className="inline-flex items-center rounded-full px-5 py-2.5 bg-muted text-foreground hover:bg-muted/80">Go to Profile</a>
+                )
+              ) : (
+                <a href="/login" className="inline-flex items-center rounded-full px-5 py-2.5 bg-muted text-foreground hover:bg-muted/80">Sign In</a>
+              )}
             </div>
-            
-            <div className="flex items-center justify-between mb-4">
-               <h2 className="text-2xl font-semibold" id="courses">My Courses</h2>
-            </div>
-            <Separator className="mb-6"/>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {courseList?.map((course: any) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  userProgress={{ completedModules: progressList.flatMap((p: any) => p.completedModules || []) } as any}
-                />
-              ))}
-            </div>
-          </section>
+          </div>
         </div>
+      </section>
 
-        <aside className="space-y-8">
-          <Card className="bg-card/80 backdrop-blur-sm sticky top-24">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium">Recent Achievements</CardTitle>
-              <Trophy className="w-5 h-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                 {achievements.map((achievement: any) => (
-                   <AchievementCard key={achievement.id} achievement={achievement} />
-                 ))}
-              </div>
+      {/* Features */}
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-6">Features</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-6">
+              <div className="text-lg font-semibold mb-1">Adaptive Quizzes</div>
+              <p className="text-sm text-muted-foreground">Question difficulty adapts to your performance to optimize learning.</p>
             </CardContent>
           </Card>
-        </aside>
-      </div>
-    </div>
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-6">
+              <div className="text-lg font-semibold mb-1">Projects & Assignments</div>
+              <p className="text-sm text-muted-foreground">Hands-on coding exercises with plagiarism checks and peer reviews.</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-6">
+              <div className="text-lg font-semibold mb-1">Progress Tracking</div>
+              <p className="text-sm text-muted-foreground">Automatic progress saves and resume where you left off anytime.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* About */}
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">About dynamIT</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">LearnSphere blends structured modules, multimedia content, and assessments to deliver a delightful, effective learning journey. Whether you're just starting or advancing your skills, our platform guides you step-by-step.</p>
+            <ul className="mt-4 list-disc ml-5 text-sm sm:text-base text-muted-foreground space-y-1">
+              <li>Engaging modules with readable, distraction-free design</li>
+              <li>Glassmorphism UI, premium visuals, and mobile-first UX</li>
+              <li>Gamification: streaks, achievements, and skill trees</li>
+            </ul>
+          </div>
+         
+        </div>
+      </section>
+
+      {/* Rules / How it works */}
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-4">How it works</h2>
+        <ol className="grid grid-cols-1 md:grid-cols-3 gap-6 list-decimal ml-5">
+          <li className="text-sm sm:text-base"><span className="font-semibold">Pick a course</span> — choose from curated topics and levels.</li>
+          <li className="text-sm sm:text-base"><span className="font-semibold">Complete modules</span> — watch, read, code, and quiz with guidance.</li>
+          <li className="text-sm sm:text-base"><span className="font-semibold">Track progress</span> — resume instantly and celebrate milestones.</li>
+        </ol>
+        <div className="mt-6">
+          <a href="/courses" className="inline-flex items-center rounded-full border border-primary px-5 py-2.5 bg-primary text-black hover:bg-primary/90">Start Learning</a>
+        </div>
+      </section>
+
+      {/* CTA Footer */}
+      <section className="border-t bg-background/50">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-xl font-semibold">Ready to dive in?</div>
+              <div className="text-sm text-muted-foreground">Join for free and explore courses crafted for growth.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

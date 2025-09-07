@@ -7,6 +7,16 @@ export interface QuizQuestion {
   correctOptionId: string;
 }
 
+export interface Quiz {
+  questions: QuizQuestion[];
+  passingScore: number;
+  allowRetakes: boolean;
+  timeLimit?: number;
+  proctored?: boolean;
+  adaptive?: boolean;
+  maxAttempts?: number;
+}
+
 export interface Module {
   id: string;
   courseId: string;
@@ -74,4 +84,31 @@ export interface CodeExecutionResponse {
   errors?: string;
   score: number;
   feedback: string;
+}
+
+export interface ContentBlock {
+  id: string;
+  title: string;
+  type: 'text' | 'video' | 'code' | 'bullets' | 'image' | 'quiz' | 'assignment' | 'composite';
+  order: number;
+  displayIndex: string;
+  estimatedMinutes: number;
+  content?: string;
+  bullets?: string[];
+  imageUrl?: string;
+  alt?: string;
+  caption?: string;
+  codeLanguage?: string;
+  codeTemplate?: string;
+  codeContent?: string;
+  codeKind?: string;
+  testCases?: any[];
+  items?: any[];
+  quiz?: Quiz;
+  // Assignment properties
+  enablePlagiarismCheck?: boolean;
+  enablePeerReview?: boolean;
+  rubric?: string[];
+  dueDate?: string;
+  maxScore?: number;
 }

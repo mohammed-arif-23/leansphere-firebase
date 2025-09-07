@@ -58,7 +58,7 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <GraduationCap className="h-12 w-12 text-accent" />
           </div>
-          <CardTitle className="text-2xl text-center">Login to LearnSphere</CardTitle>
+          <CardTitle className="text-2xl text-center">Login to dynamIT</CardTitle>
           <CardDescription className="text-center">
             Use your college registration number to sign in. We verify it with the IT Panel once, then create your account.
           </CardDescription>

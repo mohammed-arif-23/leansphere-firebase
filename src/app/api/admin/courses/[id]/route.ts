@@ -58,6 +58,7 @@ const ModuleBlockSchema = z.object({
   // video
   videoUrl: z.string().optional(),
   videoDuration: z.number().int().nonnegative().optional(),
+  requiredPercent: z.number().min(0).max(1).optional(),
   // code
   codeLanguage: z.enum(['java', 'python', 'javascript','typescript','c','cpp','go','ruby','html','css']).optional(),
   codeTemplate: z.string().optional(),
@@ -76,6 +77,8 @@ const ModuleBlockSchema = z.object({
   imageUrl: z.string().optional(),
   alt: z.string().optional(),
   caption: z.string().optional(),
+  // required gating
+  isRequired: z.boolean().default(false),
   // quiz
   quiz: QuizSchema.optional(),
   // composite
@@ -89,6 +92,8 @@ const ModuleSchema = z.object({
   description: z.string().optional(),
   order: z.number().int().nonnegative(),
   estimatedHours: z.number().int().nonnegative().default(1),
+  isLocked: z.boolean().default(false),
+  sequentialRequired: z.boolean().default(false),
   learningObjectives: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   prerequisites: z.array(z.string()).default([]),
