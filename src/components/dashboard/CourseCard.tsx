@@ -33,7 +33,7 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-600/10 dark:from-blue-500/20 dark:to-purple-600/20" />
       <CardHeader className="relative p-0">
-        <Link href={`/courses/${course.id}`}>
+        <Link href={`/courses/${course.id}`} className="block hover:opacity-100 focus:opacity-100" style={{ opacity: 1, visibility: 'visible' }}>
           <div className="relative h-48 w-full">
             <Image
               src={course.imageUrl}
@@ -48,7 +48,7 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
       <CardContent className="relative flex-grow p-6">
         <div className="flex items-center justify-between mb-2">
           <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-              <Link href={`/courses/${course.id}`} className="hover:text-primary-500">{course.title}</Link>
+              <Link href={`/courses/${course.id}`} className="hover:text-primary hover:opacity-100 focus:opacity-100 transition-colors duration-200" style={{ opacity: 1, visibility: 'visible' }}>{course.title}</Link>
           </CardTitle>
           {isLocked && <Lock className="w-5 h-5 text-gray-400" />}
         </div>
@@ -63,7 +63,7 @@ export function CourseCard({ course, userProgress }: CourseCardProps) {
           <Progress value={progressPercentage} className="h-2" />
           <p className="text-xs text-muted-foreground mt-1">{completedModulesInCourse} / {totalModules} modules</p>
         </div>
-        <Link href={`/courses/${course.id}`}>
+        <Link href={`/courses/${course.id}`} className="block w-full hover:opacity-100 focus:opacity-100" style={{ opacity: 1, visibility: 'visible' }}>
           <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" disabled={isLocked}>
             {isLocked ? "Locked" : progressPercentage > 0 && progressPercentage < 100 ? 'Continue Learning' : 'Start Course'}
           </Button>

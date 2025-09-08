@@ -29,7 +29,8 @@ export default function Header() {
           {/* Logo Section */}
           <Link 
             href="/" 
-            className="flex items-center group transition-all duration-300 ease-out hover:-translate-y-0.5"
+            className="flex items-center group transition-all duration-300 ease-out hover:-translate-y-0.5 hover:opacity-100 focus:opacity-100"
+            style={{ opacity: 1, visibility: 'visible' }}
           >
             <div className="relative h-12 w-[300px] sm:w-[360px] overflow-hidden rounded-xl">
               <div className="absolute inset-0 bg-white/20 backdrop-blur-sm rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

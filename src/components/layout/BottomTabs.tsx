@@ -46,21 +46,37 @@ export default function BottomTabs() {
   }
 
   // Hide on desktop; show on mobile
+  // Determine active index for sliding indicator
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex(({ href }) => pathname === href || (href !== "/" && pathname?.startsWith(href)))
+  );
+
   return (
-    <nav className="md:hidden sticky bottom-0 z-40 bg-white">
+    <nav
+      className="sticky bottom-0 z-50 bg-white relative"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       <ul className="grid grid-cols-3">
-        {tabs.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || (href !== "/" && pathname?.startsWith(href || ""));
-          const linkCls = `flex flex-col items-center justify-center gap-1 py-4 text-xs ${active ? "text-foreground" : "text-foreground/60"}`;
+        {tabs.map(({ href, label, icon: Icon }, idx) => {
+          const active = idx === activeIndex;
+          const linkCls = `flex flex-col items-center justify-center gap-1 py-2 text-xs ${active ? "text-foreground" : "text-foreground/60"}`;
           const pillCls = `inline-flex items-center justify-center h-8 w-16 rounded-full transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-transparent"}`;
           return (
-            <li key={href}>
-              <Link href={href} className={linkCls}>
+            <li key={href} className="relative">
+              <Link href={href} className={linkCls} aria-current={active ? "page" : undefined}>
                 <span className={pillCls}>
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span className="font-medium">{label}</span>
               </Link>
+              {/* Per-tab indicator bar (left-to-right full-width animation) */}
+              <div
+                className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-1 w-16 rounded-full bg-black origin-left transform transition-transform duration-500 ease-in-out ${
+                  active ? 'scale-x-100' : 'scale-x-0'
+                }`}
+                aria-hidden="true"
+              />
             </li>
           );
         })}

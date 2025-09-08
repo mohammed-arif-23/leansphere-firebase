@@ -31,7 +31,7 @@ export default async function HomePage() {
     <main>
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-18">
           <div className="max-w-3xl">
             <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight">dynamIT</h1>
             <p className="mt-4 text-lg sm:text-xl text-muted-foreground">A modern learning platform with adaptive quizzes, projects, proctoring, and rich progress tracking. Built for students, designed for results.</p>

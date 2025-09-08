@@ -10,12 +10,16 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "relative rounded-2xl border text-card-foreground transition-all duration-300 ease-out",
+      "relative rounded-2xl text-card-foreground transition-all duration-300 ease-out",
       {
-        "bg-card shadow-soft": variant === "default",
-        "glass-card backdrop-blur-glass border-white/20": variant === "glass",
-        "bg-card/80 backdrop-blur-glass shadow-premium border-white/30 hover:shadow-floating hover:-translate-y-1": variant === "premium",
-        "bg-card/90 shadow-floating hover:shadow-premium hover:-translate-y-2 border-white/40": variant === "floating"
+        // Default: stronger shadow for visibility
+        "bg-card/60 glass-card backdrop-blur-glass ring-1 ring-black/10 shadow-premium": variant === "default",
+        // Glass: add medium shadow
+        "bg-card/60 glass-card backdrop-blur-glass ring-1 ring-black/15 shadow-medium": variant === "glass",
+        // Premium: deeper/larger shadow, slight lift
+        "bg-card/70 glass-card backdrop-blur-glass ring-1 ring-black/20 shadow-large hover:shadow-premium hover:-translate-y-1": variant === "premium",
+        // Floating: elevated heavy shadow with stronger hover
+        "bg-card/80 glass-card backdrop-blur-glass ring-1 ring-black/25 shadow-premium hover:shadow-large hover:-translate-y-2": variant === "floating",
       },
       className
     )}
