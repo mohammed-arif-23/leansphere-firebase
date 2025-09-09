@@ -1,20 +1,21 @@
 
 'use client';
 
-import type { Module, Course, CodeExecutionResponse } from '@/types';
+import type { Module, Course, CodeExecutionResponse, ContentBlock } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { generateStarterCode } from '@/ai/flows/generate-starter-code';
 import { getCodeReview } from '@/ai/flows/ai-code-review';
 import { getSmartHint } from '@/ai/flows/smart-hints';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { CheckCircle, Loader2, Sparkles, Terminal, XCircle, Lightbulb, Bot, TestTube2, MessageSquareQuote } from 'lucide-react';
+import { CheckCircle, Loader2, Sparkles, Terminal, XCircle, Lightbulb, Bot, TestTube2, MessageSquareQuote, Languages } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Editor from '@monaco-editor/react';
 import {
   Dialog,
@@ -27,7 +28,7 @@ import {
 
 
 interface CodingAssignmentProps {
-  module: Module;
+  module: ContentBlock;
   course: Course;
 }
 
@@ -43,19 +44,60 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
   const [hint, setHint] = useState<string | null>(null);
   const [review, setReview] = useState<string | null>(null);
   const [submissionResult, setSubmissionResult] = useState<CodeExecutionResponse | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState(course.language.toLowerCase());
   const { toast } = useToast();
+
+  const supportedLanguages = [
+    { value: 'javascript', label: 'JavaScript', extension: 'js' },
+    { value: 'python', label: 'Python', extension: 'py' },
+    { value: 'java', label: 'Java', extension: 'java' },
+    { value: 'html', label: 'HTML', extension: 'html' }
+  ];
+
+  const getLanguageConfig = (lang: string) => {
+    return supportedLanguages.find(l => l.value === lang) || supportedLanguages[0];
+  };
+
+  const getDefaultCode = (language: string) => {
+    // Use the actual content from backend if available, otherwise use module.content
+    const backendContent = module.codeContent || module.codeTemplate || module.content;
+    
+    // If backend provides specific code content, use it directly
+    if (module.codeContent || module.codeTemplate) {
+      return backendContent || '';
+    }
+    
+    // Get the assignment description, with fallback
+    const assignmentDescription = module.content || 'Complete the coding assignment';
+    
+    // Otherwise, create language-specific templates with the assignment description
+    switch (language) {
+      case 'python':
+        return `# ${assignmentDescription}\n\ndef main():\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    main()`;
+      case 'java':
+        return `// ${assignmentDescription}\n\npublic class Main {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}`;
+      case 'html':
+        return `<!-- ${assignmentDescription} -->\n\n<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Solution</title>\n</head>\n<body>\n    <!-- Write your HTML solution here -->\n</body>\n</html>`;
+      default:
+        return `// ${assignmentDescription}\n\nfunction main() {\n    // Write your solution here\n}`;
+    }
+  };
 
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { code: `// Start coding your solution for:\n// ${module.content}` },
+    defaultValues: { code: getDefaultCode(selectedLanguage) },
   });
+
+  useEffect(() => {
+    form.setValue('code', getDefaultCode(selectedLanguage));
+  }, [selectedLanguage, form]);
 
   const handleGenerateCode = async () => {
     setIsGenerating(true);
     try {
       const result = await generateStarterCode({
-        prompt: module.content,
-        programmingLanguage: course.language,
+        prompt: module.content || 'Complete the coding assignment',
+        programmingLanguage: getLanguageConfig(selectedLanguage).label,
       });
       form.setValue('code', result.starterCode);
       toast({
@@ -80,8 +122,8 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
     try {
       const result = await getSmartHint({
         code: form.getValues('code'),
-        assignmentPrompt: module.content,
-        programmingLanguage: course.language,
+        assignmentPrompt: module.content || 'Complete the coding assignment',
+        programmingLanguage: getLanguageConfig(selectedLanguage).label,
       });
       setHint(result.hint);
     } catch (error) {
@@ -102,8 +144,8 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
     try {
       const result = await getCodeReview({
         code: form.getValues('code'),
-        assignmentPrompt: module.content,
-        programmingLanguage: course.language,
+        assignmentPrompt: module.content || 'Complete the coding assignment',
+        programmingLanguage: getLanguageConfig(selectedLanguage).label,
       });
       setReview(result.review);
     } catch (error) {
@@ -128,7 +170,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: data.code,
-          language: course.language.toLowerCase(),
+          language: selectedLanguage,
           assignmentPrompt: module.content,
         }),
       });
@@ -140,6 +182,41 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
 
       const result: CodeExecutionResponse = await response.json();
       setSubmissionResult(result);
+
+      // If successful with perfect score, trigger module completion
+      if (result.success && result.score === 100) {
+        try {
+          await fetch('/api/learning/progress/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseId: course.id,
+              moduleId: course.id,
+              contentBlockId: module.id
+            }),
+          });
+          
+          // Update DOM so gating can unlock instantly
+          try {
+            const el = document.querySelector(`[data-block-id="${module.id}"]`);
+            if (el) (el as HTMLElement).setAttribute('data-completed', 'true');
+          } catch {}
+          
+          // Dispatch events to trigger UI updates
+          try { 
+            window.dispatchEvent(new CustomEvent('blockCompleted')); 
+            window.dispatchEvent(new CustomEvent('module-unlock')); 
+          } catch {}
+          
+          toast({
+            title: 'Assignment Completed!',
+            description: 'Great job! Your solution is perfect. The module has been unlocked.',
+          });
+          
+        } catch (error) {
+          console.error('Failed to update progress:', error);
+        }
+      }
 
     } catch (error) {
       console.error(error);
@@ -162,32 +239,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
               <CardTitle>Coding Assignment</CardTitle>
               <CardDescription>{module.content}</CardDescription>
             </div>
-             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline"><MessageSquareQuote className="mr-2"/> AI Tutor</Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>AI Tutor</DialogTitle>
-                  <DialogDescription>
-                    Your personal AI assistant to help you learn.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                   <Button className="w-full justify-start" variant="ghost" onClick={handleGetHint} disabled={isGettingHint}>
-                      {isGettingHint ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Lightbulb className="mr-2 h-4 w-4"/>}
-                      Get a Hint
-                   </Button>
-                   {hint && <Alert><AlertTitle>Hint:</AlertTitle><AlertDescription>{hint}</AlertDescription></Alert>}
-
-                   <Button className="w-full justify-start" variant="ghost" onClick={handleGetReview} disabled={isGettingReview}>
-                     {isGettingReview ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Bot className="mr-2 h-4 w-4"/>}
-                      Get AI Code Review
-                   </Button>
-                   {review && <Alert variant="default"><AlertTitle>AI Review:</AlertTitle><AlertDescription>{review}</AlertDescription></Alert>}
-                </div>
-              </DialogContent>
-            </Dialog>
+           
           </div>
         </CardHeader>
         <Form {...form}>
@@ -198,7 +250,24 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                 name="code"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-lg">Your Solution ({course.language})</FormLabel>
+                    <div className="flex items-center justify-between mb-4">
+                      <FormLabel className="text-lg">Your Solution</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <Languages className="h-4 w-4" />
+                        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {supportedLanguages.map((lang) => (
+                              <SelectItem key={lang.value} value={lang.value}>
+                                {lang.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                     <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 mt-2">
                        <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b dark:border-gray-700 flex justify-between items-center">
                           <div className="flex items-center space-x-2">
@@ -206,14 +275,16 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                             <div className="w-3 h-3 rounded-full bg-yellow-500" />
                             <div className="w-3 h-3 rounded-full bg-green-500" />
                             <span className="ml-4 text-sm font-medium">
-                              {course.language === "Java" ? "Main.java" : course.language === "Python" ? "main.py" : "main.js"}
+                              {selectedLanguage === 'java' ? 'Main.java' : 
+                               selectedLanguage === 'python' ? 'main.py' : 
+                               selectedLanguage === 'html' ? 'index.html' : 'main.js'}
                             </span>
                           </div>
                         </div>
                         <FormControl>
                           <Editor
-                            height="400px"
-                            language={course.language.toLowerCase()}
+                            height="450px"
+                            language={selectedLanguage}
                             value={field.value}
                             onChange={field.onChange}
                             theme="vs-dark"
@@ -224,6 +295,12 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                               roundedSelection: false,
                               scrollBeyondLastLine: false,
                               automaticLayout: true,
+                              padding: { top: 16, bottom: 16 },
+                              wordWrap: 'on',
+                              scrollbar: {
+                                vertical: 'visible',
+                                horizontal: 'visible'
+                              }
                             }}
                           />
                         </FormControl>
@@ -240,7 +317,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                 ) : (
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}
-                Generate Starter Code
+                Generate Code
               </Button>
               <Button type="submit" disabled={isSubmitting} className='bg-green-600 hover:bg-green-700'>
                 {isSubmitting ? (
@@ -248,7 +325,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                 ) : (
                   <TestTube2 className="mr-2 h-4 w-4" />
                 )}
-                Grade & Submit
+                Submit
               </Button>
             </CardFooter>
           </form>
@@ -262,7 +339,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
           </div>
         </div>
 
-        <div className="p-4 font-mono text-sm min-h-[200px]">
+        <div className="p-6 font-mono text-sm min-h-[200px]">
           {isSubmitting ? (
              <div className="flex items-center space-x-2 text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -292,10 +369,11 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                   </pre>
                 </div>
               )}
+
             </div>
           ) : (
             <div className="text-gray-500 italic">
-              Click "Grade & Submit" to see the result...
+              Click "Submit" to see the result...
             </div>
           )}
         </div>

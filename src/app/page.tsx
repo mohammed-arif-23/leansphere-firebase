@@ -3,6 +3,7 @@ import { ensureMongooseConnection } from '@/lib/mongodb';
 import { CourseService, ProgressService } from '@/lib/services/database';
 import { cookies } from 'next/headers';
 import { verifyJWT } from '@/lib/auth';
+import AutoLogin from '@/components/auth/AutoLogin';
 
 export default async function HomePage() {
   // Try to detect user (optional)
@@ -29,6 +30,8 @@ export default async function HomePage() {
 
   return (
     <main>
+      {/* Auto Login handler: parses ?studentId= and attempts autologin */}
+      <AutoLogin />
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-18">

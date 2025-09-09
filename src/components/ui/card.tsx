@@ -12,14 +12,14 @@ const Card = React.forwardRef<
     className={cn(
       "relative rounded-2xl text-card-foreground transition-all duration-300 ease-out",
       {
-        // Default: stronger shadow for visibility
-        "bg-card/60 glass-card backdrop-blur-glass ring-1 ring-black/10 shadow-premium": variant === "default",
-        // Glass: add medium shadow
-        "bg-card/60 glass-card backdrop-blur-glass ring-1 ring-black/15 shadow-medium": variant === "glass",
-        // Premium: deeper/larger shadow, slight lift
-        "bg-card/70 glass-card backdrop-blur-glass ring-1 ring-black/20 shadow-large hover:shadow-premium hover:-translate-y-1": variant === "premium",
-        // Floating: elevated heavy shadow with stronger hover
-        "bg-card/80 glass-card backdrop-blur-glass ring-1 ring-black/25 shadow-premium hover:shadow-large hover:-translate-y-2": variant === "floating",
+        // Default: minimal shadow, clean border
+        "bg-card/80 backdrop-blur-sm border border-border/50 hover:border-border/80": variant === "default",
+        // Glass: subtle glass effect with minimal shadow
+        "bg-card/60 backdrop-blur-md border border-border/30 shadow-sm": variant === "glass",
+        // Premium: light shadow with smooth hover
+        "bg-card/70 backdrop-blur-md border border-border/40 shadow-sm hover:shadow-md hover:-translate-y-0.5": variant === "premium",
+        // Floating: moderate shadow for elevation
+        "bg-card/80 backdrop-blur-md border border-border/50 shadow-md hover:shadow-lg hover:-translate-y-1": variant === "floating",
       },
       className
     )}

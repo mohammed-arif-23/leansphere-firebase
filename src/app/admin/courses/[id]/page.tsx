@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ArrowUp, ArrowDown, Copy, Trash2, Plus, MoreHorizontal } from "lucide-react";
+import { ArrowUp, ArrowDown, Copy, Trash2, Plus, MoreHorizontal, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import ProctorMonitor from '@/components/assessment/ProctorMonitor';
@@ -41,6 +41,15 @@ export default function AdminCourseEditorPage() {
   const [collapseTick, setCollapseTick] = useState(0);
   const isCollapsed = (k: string) => !!collapsed.current[k];
   const setCollapsed = (k: string, v: boolean) => { collapsed.current[k] = v; setCollapseTick((x) => x + 1); };
+  
+  // Module collapse state management
+  const moduleCollapsed = useRef<Record<string, boolean>>({});
+  const [moduleCollapseTick, setModuleCollapseTick] = useState(0);
+  const isModuleCollapsed = (moduleId: string) => !!moduleCollapsed.current[moduleId];
+  const setModuleCollapsed = (moduleId: string, collapsed: boolean) => { 
+    moduleCollapsed.current[moduleId] = collapsed; 
+    setModuleCollapseTick((x) => x + 1); 
+  };
   const collapseAllCompositeItems = (courseObj: any, v: boolean) => {
     (courseObj?.modules || []).forEach((m: any) => {
       (m.contentBlocks || []).forEach((b: any) => {
@@ -459,7 +468,7 @@ export default function AdminCourseEditorPage() {
           ...(type === 'bullets' ? { bullets: [] } : {}),
           ...(type === 'image' ? { imageUrl: '', alt: '', caption: '' } : {}),
           ...(type === 'code' ? { codeLanguage: 'javascript', codeTemplate: '', codeContent: '' } : {}),
-          ...(type === 'assignment' ? { content: 'Complete the coding assignment below:', codeLanguage: 'javascript', codeContent: '// Write your solution here\n', codeKind: 'assignment', testCases: [] } : {}),
+          ...(type === 'assignment' ? { content: 'Complete the coding assignment below:', codeLanguage: 'javascript', codeContent: '// Write your solution here\n', codeKind: 'exam', testCases: [] } : {}),
           ...(type === 'quiz' ? { quiz: { questions: [], passingScore: 70, allowRetakes: true, timeLimit: null } } : {}),
           ...(type === 'composite' ? { items: [] } : {}),
         };
@@ -509,7 +518,7 @@ export default function AdminCourseEditorPage() {
             content: 'Complete the coding assignment below:', 
             codeLanguage: 'javascript', 
             codeContent: '// Write your solution here\n',
-            codeKind: 'assignment',
+            codeKind: 'exam',
             testCases: []
           } : {}),
           ...(type === 'composite' ? { items: [] } : {}),
@@ -758,7 +767,7 @@ export default function AdminCourseEditorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="rounded-xl shadow-sm">
+          <Card className="rounded-xl border">
             <CardHeader><CardTitle>Course Info</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div>
@@ -916,7 +925,20 @@ export default function AdminCourseEditorPage() {
         <Card className="rounded-xl shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Modules</CardTitle>
-            <Button onClick={addModule} size="sm" variant="admin">Add Module</Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => {
+                  const allModules = course.modules || [];
+                  const allCollapsed = allModules.every((m: any) => isModuleCollapsed(m.id));
+                  allModules.forEach((m: any) => setModuleCollapsed(m.id, !allCollapsed));
+                }} 
+                size="sm" 
+                variant="outline"
+              >
+                {(course.modules || []).every((m: any) => isModuleCollapsed(m.id)) ? 'Expand All' : 'Collapse All'}
+              </Button>
+              <Button onClick={addModule} size="sm" variant="admin">Add Module</Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {(course.modules || [])
@@ -930,45 +952,79 @@ export default function AdminCourseEditorPage() {
                   String(m.description || '').toLowerCase().includes(q)
                 );
               })
-              .map((m: any, i: number, arr: any[]) => (
+              .map((m: any, i: number, arr: any[]) => {
+                const moduleIsCollapsed = isModuleCollapsed(m.id);
+                return (
                 <div
                   key={m.id}
                   className={`relative glass-card p-4 space-y-3 ${selectedModuleId === m.id ? 'ring-2 ring-primary/50' : ''}`}
-                  onClick={() => setSelectedModuleId(m.id)}
-                  role="button"
-                  tabIndex={0}
                 >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="admin" className="absolute right-3 top-3">+ Block</Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'text')}>
-                        📝 Text Block
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'bullets')}>
-                        📋 Bullet List
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'image')}>
-                        🖼️ Image
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'video')}>
-                        🎥 Video
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'code')}>
-                        💻 Code Snippet
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'quiz')}>
-                        ❓ Quiz
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'assignment')}>
-                        📚 Assignment
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'composite')}>
-                        📦 Composite
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {/* Module Header */}
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                      onClick={() => setModuleCollapsed(m.id, !moduleIsCollapsed)}
+                    >
+                      {moduleIsCollapsed ? (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {m.displayIndex || `Module ${i + 1}`}
+                        </span>
+                        <span className="font-semibold">{m.title || 'Untitled Module'}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({(m.contentBlocks || []).length} blocks)
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {!moduleIsCollapsed && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="admin">+ Block</Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'text')}>
+                              📝 Text Block
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'bullets')}>
+                              📋 Bullet List
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'image')}>
+                              🖼️ Image
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'video')}>
+                              🎥 Video
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'code')}>
+                              💻 Code Snippet
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'quiz')}>
+                              ❓ Quiz
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'assignment')}>
+                              📚 Assignment
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'composite')}>
+                              📦 Composite
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Module Content - Only show when not collapsed */}
+                  {!moduleIsCollapsed && (
+                    <div className="space-y-3"
+                         onClick={() => setSelectedModuleId(m.id)}
+                         role="button"
+                         tabIndex={0}
+                    >
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div>
                       <Label>Display Index</Label>
@@ -1291,12 +1347,12 @@ export default function AdminCourseEditorPage() {
                                     {((b.codeContent || '').split(/\r?\n/).length)} lines • {(b.codeContent || '').length} chars
                                   </div>
                                 </div>
-                                <div className="text-xs text-gray-400">Code Kind: assignment</div>
+                                <div className="text-xs text-gray-400">Code Kind: exam</div>
                               </div>
                               <div className="p-3">
                                 <Textarea
                                   value={b.codeContent || ''}
-                                  onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value, codeKind: 'assignment' })}
+                                  onChange={(e) => updateBlock(m.id, b.id, { codeContent: e.target.value, codeKind: 'exam' })}
                                   className="font-mono bg-[#1e1e1e] text-gray-100 border-none outline-none min-h-40"
                                   placeholder="// Starter code or submission template"
                                 />
@@ -2002,8 +2058,11 @@ export default function AdminCourseEditorPage() {
                       </div>
                     ))}
                   </div>
+                    </div>
+                  )}
                 </div>
-              ))}
+              );
+              })}
             </CardContent>
           </Card>
         </div>

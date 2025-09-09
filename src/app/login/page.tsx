@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { GraduationCap } from "lucide-react";
+import AutoLogin from "@/components/auth/AutoLogin";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -64,6 +65,8 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Auto Login handler: parses ?studentId= and attempts autologin */}
+          <AutoLogin />
           <form className="grid gap-4" onSubmit={onSubmit}>
             <div className="grid gap-2">
               <Label htmlFor="regNo">Registration Number</Label>

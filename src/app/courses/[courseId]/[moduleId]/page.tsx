@@ -12,6 +12,7 @@ import CodeRunnerClient from '@/components/course/lazy/CodeRunnerLazy';
 import CopyButton from '@/components/CopyButton';
 import QuizClient from '@/components/course/lazy/QuizLazy';
 import VideoBlock from '@/components/course/lazy/VideoLazy';
+import { CodingAssignment } from '@/components/course/CodingAssignment';
 import { Progress } from '@/components/ui/progress';
 import PrismClient from '@/components/PrismClient';
 import ReactMarkdown from 'react-markdown';
@@ -26,6 +27,28 @@ import ProctorMonitorClient from '@/components/assessment/ProctorMonitorClient';
 import AdaptiveQuizClient from '@/components/assessment/AdaptiveQuizClient';
 import PlagiarismDetectorClient from '@/components/assessment/PlagiarismDetectorClient';
 import PeerReviewClient from '@/components/assessment/PeerReviewClient';
+
+// Helper function to serialize MongoDB objects to plain objects
+function serializeForClient(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(serializeForClient);
+  
+  const serialized: any = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key) && key !== '_id' && key !== '__v') {
+      const value = obj[key];
+      if (value instanceof Date) {
+        serialized[key] = value.toISOString();
+      } else if (typeof value === 'object' && value !== null) {
+        serialized[key] = serializeForClient(value);
+      } else {
+        serialized[key] = value;
+      }
+    }
+  }
+  return serialized;
+}
 
 export default async function ModulePage({ params }: { params: Promise<{ courseId: string, moduleId: string }> }) {
   const { courseId, moduleId } = await params;
@@ -235,7 +258,7 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                             language={b.codeLanguage || 'javascript'}
                             starterCode={b.codeTemplate || ''}
                             mode={b.codeKind || 'illustrative'}
-                            testCases={b.testCases || []}
+                            testCases={serializeForClient(b.testCases || [])}
                             courseId={course.id}
                             moduleId={module.id}
                             contentBlockId={b.id}
@@ -244,75 +267,22 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                       )}
 
                       {b.type === 'quiz' && b.quiz && (
-                        <QuizClient quiz={b.quiz} courseId={course.id} moduleId={module.id} contentBlockId={b.id} />
+                        <QuizClient quiz={serializeForClient(b.quiz)} courseId={course.id} moduleId={module.id} contentBlockId={b.id} />
                       )}
 
                       {b.type === 'assignment' && (
-                        <div className="space-y-3">
-                          {b.content && (
-                            <div className="prose max-w-none whitespace-pre-wrap">{b.content}</div>
-                          )}
-                          {typeof b.assignmentPoints === 'number' && (
-                            <div className="text-sm text-muted-foreground">Points: {b.assignmentPoints}</div>
-                          )}
-                          {b.codeContent && (
-                            <div className="rounded-md overflow-hidden border bg-[#2d2d2d]">
-                              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                                <div className="flex items-center gap-2">
-                                  <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
-                                  <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
-                                  <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="text-xs text-gray-300">{(b.codeLanguage || 'javascript').toUpperCase()}</div>
-                                  <CopyButton text={b.codeContent || ''} />
-                                </div>
-                              </div>
-                              <div className="p-3 overflow-auto" style={{ fontSize: (b.codeFontSize ? Number(b.codeFontSize) : 12) + 'px' }}>
-                                <pre className="m-0 p-0 bg-transparent"><code className={`language-${b.codeLanguage || 'javascript'}`}>{b.codeContent}</code></pre>
-                              </div>
-                            </div>
-                          )}
-                          {Array.isArray(b.attachments) && b.attachments.length > 0 && (
-                            <div className="mt-2">
-                              <div className="text-sm font-medium mb-1">Attachments</div>
-                              <ul className="list-disc ml-5 space-y-1">
-                                {b.attachments.map((at: any, ai: number) => (
-                                  <li key={at.id || ai}>
-                                    <a href={at.url} target="_blank" rel="noopener noreferrer" className="underline">
-                                      {at.name || at.url}
-                                    </a>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {Array.isArray(b.rubric) && b.rubric.length > 0 && (
-                            <div className="mt-2">
-                              <div className="text-sm font-medium mb-1">Rubric</div>
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full text-sm">
-                                  <thead>
-                                    <tr className="text-left text-muted-foreground">
-                                      <th className="px-3 py-2">Criterion</th>
-                                      <th className="px-3 py-2">Max Points</th>
-                                      <th className="px-3 py-2">Weight</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {b.rubric.map((rc: any, ri: number) => (
-                                      <tr key={rc.id || ri} className="border-t">
-                                        <td className="px-3 py-2">{rc.description || '-'}</td>
-                                        <td className="px-3 py-2">{rc.maxPoints ?? '-'}</td>
-                                        <td className="px-3 py-2">{rc.weight ?? '-'}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        <CodingAssignment 
+                          module={serializeForClient({
+                            ...b,
+                            content: b.content || 'Complete the coding assignment below:'
+                          })}
+                          course={serializeForClient({
+                            ...course,
+                            language: b.codeLanguage || course.language || 'JavaScript',
+                            imageUrl: course.imageUrl || '',
+                            imageHint: course.imageHint || '',     
+                          })}
+                        />
                       )}
 
                       {b.type === 'composite' && Array.isArray(b.items) && (
@@ -396,7 +366,7 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                 courseId={course.id}
                 moduleId={module.id}
                 contentBlockId={module.contentBlocks.find(block => block.type === 'quiz')?.id || `${module.id}-quiz`}
-                questionPool={(module.contentBlocks.find(block => block.type === 'quiz')?.quiz?.questions || []).map((q: any, idx: number) => ({
+                questionPool={serializeForClient((module.contentBlocks.find(block => block.type === 'quiz')?.quiz?.questions || []).map((q: any, idx: number) => ({
                   id: q.id ?? String(idx),
                   question: q.question ?? q.prompt ?? '',
                   type: (q.type === 'true_false' ? 'true_false' : (q.type === 'essay' ? 'essay' : (q.type === 'short_answer' ? 'short_answer' : 'multiple_choice'))),
@@ -407,32 +377,11 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                   timeEstimate: q.timeEstimate ?? 60,
                   explanation: q.explanation,
                   hints: q.hints ?? []
-                }))}
+                })))}
                 timeLimit={module.contentBlocks.find(block => block.type === 'quiz')?.quiz?.timeLimit}
               />
             )}
             
-            {module.contentBlocks?.some(block => block.type === 'assignment') && (
-              <>
-                <PlagiarismDetectorClient 
-                  assignmentId={`${course.id}-${module.id}-assignment`}
-                  studentId={auth.sub}
-                  submissionText={""}
-                />
-                <PeerReviewClient 
-                  assignmentId={`${course.id}-${module.id}-assignment`}
-                  mode="review"
-                  currentUserId={auth.sub}
-                  currentUserName="Student"
-                  rubric={[
-                    { id: 'quality', name: 'Quality', description: 'Overall quality of work', maxPoints: 25, levels: [{ points: 5, label: 'Poor', description: 'Below expectations' }, { points: 15, label: 'Good', description: 'Meets expectations' }, { points: 25, label: 'Excellent', description: 'Exceeds expectations' }] },
-                    { id: 'completeness', name: 'Completeness', description: 'All requirements covered', maxPoints: 25, levels: [{ points: 5, label: 'Partial', description: 'Missing parts' }, { points: 15, label: 'Mostly', description: 'Minor gaps' }, { points: 25, label: 'Complete', description: 'All covered' }] },
-                    { id: 'creativity', name: 'Creativity', description: 'Originality and creativity', maxPoints: 25, levels: [{ points: 5, label: 'Low', description: 'Minimal originality' }, { points: 15, label: 'Good', description: 'Some originality' }, { points: 25, label: 'High', description: 'Very original' }] },
-                    { id: 'technical', name: 'Technical Skills', description: 'Technical correctness', maxPoints: 25, levels: [{ points: 5, label: 'Weak', description: 'Many issues' }, { points: 15, label: 'Solid', description: 'Few issues' }, { points: 25, label: 'Strong', description: 'No issues' }] }
-                  ]}
-                />
-              </>
-            )}
             
             {/* Show ProctorMonitor for proctored assessments */}
             {(module.contentBlocks?.some(block => block.type === 'quiz' && block.quiz?.proctored)) && (
@@ -497,7 +446,7 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
       <ModuleProgressClient
         courseId={course.id}
         moduleId={module.id}
-        blocks={progressClientBlocks as any}
+        blocks={serializeForClient(progressClientBlocks)}
         initiallyCompletedIds={initiallyCompletedIds}
       />
       {/* Sticky bottom nav with gating */}
@@ -507,7 +456,7 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
         prevHref={prevModule ? `/courses/${course.id}/${prevModule.id}` : null}
         nextHref={nextModule ? `/courses/${course.id}/${nextModule.id}` : `/courses/${course.id}`}
         initiallyLocked={!!nextModule && initiallyLocked}
-        requiredBlocks={requiredBlocksData}
+        requiredBlocks={serializeForClient(requiredBlocksData)}
       />
     </PrismClient>
   );

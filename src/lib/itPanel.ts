@@ -37,3 +37,30 @@ export async function findStudentByRegistrationNumber(registrationNumber: string
   };
   return s;
 }
+
+// Attempts to find a student by primary id in Supabase (used for magic autologin links)
+export async function findStudentById(studentId: string): Promise<ITPanelStudent | null> {
+  ensureItSupabaseConfigured();
+  const supa = itSupabase!;
+
+  const { data, error } = await supa
+    .from('unified_students')
+    .select('*')
+    .eq('id', studentId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  if (!data) return null;
+
+  const s: ITPanelStudent = {
+    id: data.id,
+    registrationNumber: data.register_number,
+    name: data.name,
+    email: data.email,
+    mobile: data.mobile,
+    classYear: data.class_year,
+  };
+  return s;
+}
+

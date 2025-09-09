@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 
 interface CodeExecutionRequest {
   code: string;
-  language: 'java' | 'python' | 'javascript';
+  language: 'java' | 'python' | 'javascript' | 'html';
   assignmentPrompt: string; 
 }
 
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     
-    const validLanguages = ['java', 'python', 'javascript'];
+    const validLanguages = ['java', 'python', 'javascript', 'html'];
     if (!validLanguages.includes(language.toLowerCase())) {
         return NextResponse.json({ error: `Unsupported language: ${language}`}, { status: 400 });
     }

@@ -6,14 +6,14 @@ import { ReactNode } from 'react';
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   // Require admin auth for ALL /admin routes, irrespective of page components
   const cookieStore = await cookies();
-  const token = cookieStore.get('admin_token')?.value || cookieStore.get('auth_token')?.value;
+  const token = cookieStore.get('admin_token')?.value;
   if (!token) {
-    redirect('/login?redirect=' + encodeURIComponent('/admin'));
+    redirect('/admin-login?redirect=' + encodeURIComponent('/admin'));
   }
   try {
     verifyAdminJWT(token);
   } catch {
-    redirect('/login?redirect=' + encodeURIComponent('/admin'));
+    redirect('/admin-login?redirect=' + encodeURIComponent('/admin'));
   }
 
   // Add top padding to avoid any fixed navbar overlapping the admin content
