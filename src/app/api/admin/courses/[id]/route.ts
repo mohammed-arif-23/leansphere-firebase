@@ -30,8 +30,9 @@ const QuizSchema = z.object({
 
 const CompositeItemSchema = z.object({
   id: z.string().optional(),
-  kind: z.enum(['text','markdown','video','image','code','bullets']),
+  kind: z.enum(['text','markdown','video','image','code','bullets','html']),
   content: z.string().optional(),
+  html: z.string().optional(),
   textHeadingLevel: z.number().int().min(1).max(6).optional(),
   textFontSize: z.string().optional(),
   bullets: z.array(z.string()).optional(),
@@ -47,9 +48,10 @@ const CompositeItemSchema = z.object({
 const ModuleBlockSchema = z.object({
   id: z.string(),
   displayIndex: z.string().optional(),
-  type: z.enum(['text', 'video', 'code', 'quiz', 'assignment', 'bullets', 'image', 'composite']),
+  type: z.enum(['text', 'video', 'code', 'quiz', 'assignment', 'bullets', 'image', 'composite', 'html']),
   title: z.string(),
   content: z.string().default(''),
+  html: z.string().optional(),
   order: z.number().int().nonnegative(),
   estimatedMinutes: z.number().int().nonnegative().optional(),
   markdown: z.boolean().optional(),
@@ -104,6 +106,7 @@ const CourseSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  customHtml: z.string().optional(),
   language: z.enum(['Java', 'Python', 'JavaScript', 'General']).default('General'),
   difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
   estimatedHours: z.number().int().nonnegative().default(1),

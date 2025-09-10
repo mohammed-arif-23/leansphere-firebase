@@ -93,6 +93,13 @@ export default function ModuleProgressClient({ courseId, moduleId, blocks, initi
       completed.current.add(block.id);
       // update chip UI
       updateChip(block.id, true);
+      // also reflect completion in the DOM so gating can unlock
+      try {
+        const el = document.querySelector(`[data-block-id="${block.id}"]`);
+        if (el) (el as HTMLElement).setAttribute('data-completed', 'true');
+      } catch {}
+      // notify listeners
+      try { window.dispatchEvent(new CustomEvent('blockCompleted')); } catch {}
       // mark completed in DB
       sendUpdate(block.id, { status: 'completed', completedAt: new Date().toISOString() });
       // fire lightweight analytics

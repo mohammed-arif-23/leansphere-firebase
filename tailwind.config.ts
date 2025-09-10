@@ -7,6 +7,26 @@ export default {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  safelist: [
+    // containers
+    'max-w-md', 'mx-auto', 'rounded-xl', 'overflow-hidden', 'border', 'border-0', 'border-gray-200',
+    // spacing
+    'p-6', 'pb-0', 'mt-6', 'pt-6', 'p-4',
+    // text
+    'text-gray-600', 'text-sm', 'text-center', 'text-white', 'text-black', 'text-gray-400', 'italic',
+    // flex
+    'flex', 'justify-center', 'items-center',
+    // bg
+    'bg-white', 'bg-black',
+    // borders
+    'border-t',
+    // hover/focus
+    'hover:shadow-lg', 'transition-shadow', 'duration-300',
+    'hover:bg-white', 'hover:text-black', 'hover:border-black',
+    'focus:outline-none', 'focus:ring-2', 'focus:ring-offset-2', 'focus:ring-black',
+    // buttons
+    'px-4', 'py-2', 'font-medium', 'rounded-md',
+  ],
   theme: {
     container: {
       center: true,

@@ -77,8 +77,9 @@ const TestCaseSchema = new Schema({
 
 const CompositeItemSchema = new Schema({
   id: { type: String },
-  kind: { type: String, enum: ['text','markdown','video','image','code','bullets'], required: true },
+  kind: { type: String, enum: ['text','markdown','video','image','code','bullets','html'], required: true },
   content: { type: String },
+  html: { type: String },
   textHeadingLevel: { type: Number, min: 1, max: 6 },
   textFontSize: { type: String },
   bullets: [{ type: String }],
@@ -97,13 +98,14 @@ const ContentBlockSchema = new Schema({
   displayIndex: { type: String },
   type: { 
     type: String, 
-    enum: ['text', 'video', 'code', 'quiz', 'assignment', 'bullets', 'image', 'composite'], 
+    enum: ['text', 'video', 'code', 'quiz', 'assignment', 'bullets', 'image', 'composite', 'html'], 
     required: true,
     index: true 
   },
   title: { type: String, required: true },
   // Plain text content for text/code blocks; optional for image/bullets
   content: { type: String },
+  html: { type: String },
   textHeadingLevel: { type: Number, min: 1, max: 6 },
   textFontSize: { type: String },
   order: { type: Number, required: true, index: true },
@@ -174,6 +176,7 @@ const CourseSchema = new Schema({
   id: { type: String, required: true, unique: true, index: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
+  customHtml: { type: String },
   language: { 
     type: String, 
     enum: ['Java', 'Python', 'JavaScript', 'General'], 

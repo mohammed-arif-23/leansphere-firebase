@@ -27,6 +27,7 @@ import ProctorMonitorClient from '@/components/assessment/ProctorMonitorClient';
 import AdaptiveQuizClient from '@/components/assessment/AdaptiveQuizClient';
 import PlagiarismDetectorClient from '@/components/assessment/PlagiarismDetectorClient';
 import PeerReviewClient from '@/components/assessment/PeerReviewClient';
+import HtmlRenderer from '@/components/HtmlRenderer';
 
 // Helper function to serialize MongoDB objects to plain objects
 function serializeForClient(obj: any): any {
@@ -203,6 +204,10 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                         })()
                       )}
 
+                      {b.type === 'html' && (
+                        <HtmlRenderer html={b.html || ''} />
+                      )}
+
                       {b.type === 'video' && b.videoUrl && (
                         <div className="w-full">
                           <VideoBlock
@@ -336,6 +341,9 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                                   <img src={it.imageUrl} alt={it.alt || ''} className="max-h-96 rounded object-contain" />
                                   {(it.caption || it.alt) && <figcaption className="text-sm text-muted-foreground mt-1">{it.caption || it.alt}</figcaption>}
                                 </figure>
+                              )}
+                              {it.kind === 'html' && (
+                                <HtmlRenderer html={it.html || ''} />
                               )}
                             </div>
                           ))}

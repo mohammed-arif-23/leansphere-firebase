@@ -21,6 +21,7 @@ import AdaptiveQuiz from '@/components/assessment/AdaptiveQuiz';
 import PlagiarismDetector from '@/components/assessment/PlagiarismDetector';
 import PeerReview from '@/components/assessment/PeerReview';
 // Markdown removed from admin UI
+import HtmlRenderer from '@/components/HtmlRenderer';
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then(r => r.json());
 
@@ -182,7 +183,7 @@ export default function AdminCourseEditorPage() {
   // Merge incoming course JSON into current course
   const mergeCourses = (curr: any, incoming: any) => {
     if (!curr) return structuredClone(incoming);
-    const topFields = ['title','description','language','difficulty','tags','imageUrl','imageHint','thumbnailUrl','learningObjectives','isPublished','isActive','isFree','prerequisites'];
+    const topFields = ['title','description','customHtml','language','difficulty','tags','imageUrl','imageHint','thumbnailUrl','learningObjectives','isPublished','isActive','isFree','prerequisites'];
     const out: any = { ...curr };
     topFields.forEach((k) => {
       if (incoming[k] !== undefined) out[k] = structuredClone(incoming[k]);
@@ -203,7 +204,7 @@ export default function AdminCourseEditorPage() {
           if (!ib?.id) continue;
           if (cbMap.has(String(ib.id))) {
             const cb: any = cbMap.get(String(ib.id));
-            const bFields = ['displayIndex','type','title','content','order','estimatedMinutes','videoUrl','videoDuration','requiredPercent','codeLanguage','codeTemplate','codeContent','codeKind','timeLimitMs','memoryLimitMb','testCases','bullets','bulletsMarkdown','imageUrl','alt','caption','isRequired','quiz','items'];
+            const bFields = ['displayIndex','type','title','content','html','order','estimatedMinutes','videoUrl','videoDuration','requiredPercent','codeLanguage','codeTemplate','codeContent','codeKind','timeLimitMs','memoryLimitMb','testCases','bullets','bulletsMarkdown','imageUrl','alt','caption','isRequired','quiz','items'];
             bFields.forEach((k) => { if (ib[k] !== undefined) cb[k] = structuredClone(ib[k]); });
           } else {
             cbMap.set(String(ib.id), structuredClone(ib));
@@ -377,10 +378,12 @@ export default function AdminCourseEditorPage() {
         if (idx < 0) return m;
         const target = idx + dir;
         if (target < 0 || target >= blocks.length) return m;
-        const tmp = blocks[idx].order;
-        blocks[idx].order = blocks[target].order;
-        blocks[target].order = tmp;
-        return { ...m, contentBlocks: blocks };
+        // Stable reorder via splice then reindex orders
+        const reordered = [...blocks];
+        const [moved] = reordered.splice(idx, 1);
+        reordered.splice(target, 0, moved);
+        const withOrder = reordered.map((b: any, i: number) => ({ ...b, order: i + 1 }));
+        return { ...m, contentBlocks: withOrder };
       });
       return { ...c, modules };
     });
@@ -393,10 +396,12 @@ export default function AdminCourseEditorPage() {
       if (idx < 0) return c;
       const target = idx + dir;
       if (target < 0 || target >= mods.length) return c;
-      const tmp = mods[idx].order;
-      mods[idx].order = mods[target].order;
-      mods[target].order = tmp;
-      return { ...c, modules: mods };
+      // Stable reorder via splice then reindex orders
+      const reordered = [...mods];
+      const [moved] = reordered.splice(idx, 1);
+      reordered.splice(target, 0, moved);
+      const withOrder = reordered.map((m: any, i: number) => ({ ...m, order: i + 1 }));
+      return { ...c, modules: withOrder };
     });
   };
 
@@ -460,11 +465,12 @@ export default function AdminCourseEditorPage() {
         const blocks = [...(m.contentBlocks || [])].sort((a: any, b: any) => a.order - b.order);
         const newBlock: any = {
           id: `b-${Date.now()}`,
-          title: type === 'text' ? 'Text' : type === 'bullets' ? 'Bullet List' : type === 'image' ? 'Image' : type === 'code' ? 'Code Snippet' : type === 'video' ? 'Video' : type === 'quiz' ? 'Quiz' : type === 'assignment' ? 'Assignment' : type === 'composite' ? 'Composite' : type,
+          title: type === 'text' ? 'Text' : type === 'bullets' ? 'Bullet List' : type === 'image' ? 'Image' : type === 'code' ? 'Code Snippet' : type === 'video' ? 'Video' : type === 'quiz' ? 'Quiz' : type === 'assignment' ? 'Assignment' : type === 'composite' ? 'Composite' : type === 'html' ? 'HTML' : type,
           type,
           displayIndex: '',
           estimatedMinutes: 5,
           ...(type === 'text' ? { content: '' } : {}),
+          ...(type === 'html' ? { html: '' } : {}),
           ...(type === 'bullets' ? { bullets: [] } : {}),
           ...(type === 'image' ? { imageUrl: '', alt: '', caption: '' } : {}),
           ...(type === 'code' ? { codeLanguage: 'javascript', codeTemplate: '', codeContent: '' } : {}),
@@ -495,13 +501,15 @@ export default function AdminCourseEditorPage() {
                  type === 'quiz' ? 'Quiz' :
                  type === 'assignment' ? 'Code Assignment' :
                  type === 'video' ? 'Video' :
-                 type === 'composite' ? 'Composite' : type,
+                 type === 'composite' ? 'Composite' :
+                 type === 'html' ? 'HTML' : type,
           type,
           order: (m.contentBlocks?.length || 0) + 1,
           displayIndex: '',
           estimatedMinutes: 5,
           isRequired: type === 'quiz' || type === 'assignment', // Auto-mark quiz and assignments as required
           ...(type === 'text' ? { content: '' } : {}),
+          ...(type === 'html' ? { html: '' } : {}),
           ...(type === 'bullets' ? { bullets: [] } : {}),
           ...(type === 'image' ? { imageUrl: '', alt: '', caption: '' } : {}),
           ...(type === 'video' ? { videoUrl: '' } : {}),
@@ -791,6 +799,18 @@ export default function AdminCourseEditorPage() {
                 <Label>Description</Label>
                 <Textarea value={course.description} onChange={(e) => setCourse({ ...course, description: e.target.value })} />
               </div>
+              <div>
+                <Label>Custom HTML (renders on course overview page)</Label>
+                <Textarea
+                  value={course.customHtml || ''}
+                  onChange={(e) => setCourse({ ...course, customHtml: e.target.value })}
+                  placeholder="<div class='p-3 rounded bg-muted'>Welcome to the course</div>"
+                />
+                <div className="mt-2 border rounded p-2 bg-muted/30">
+                  <div className="text-xs text-muted-foreground mb-1">Preview (sanitized)</div>
+                  <HtmlRenderer html={course.customHtml || ''} />
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <Label>Language</Label>
@@ -1009,6 +1029,9 @@ export default function AdminCourseEditorPage() {
                             <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'assignment')}>
                               📚 Assignment
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'html')}>
+                              🧩 HTML
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => addBlockOfType(m.id, 'composite')}>
                               📦 Composite
                             </DropdownMenuItem>
@@ -1165,6 +1188,7 @@ export default function AdminCourseEditorPage() {
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'code')}>Insert Code Above</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'bullets')}>Insert Bullets Above</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'image')}>Insert Image Above</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'html')}>Insert HTML Above</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi, 'composite')}>Insert Composite Above</DropdownMenuItem>
                                 <Separator className="my-1" />
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'text')}>Insert Text Below</DropdownMenuItem>
@@ -1172,6 +1196,7 @@ export default function AdminCourseEditorPage() {
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'code')}>Insert Code Below</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'bullets')}>Insert Bullets Below</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'image')}>Insert Image Below</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'html')}>Insert HTML Below</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => insertBlockAt(m.id, bi + 1, 'composite')}>Insert Composite Below</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1182,6 +1207,7 @@ export default function AdminCourseEditorPage() {
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="html">HTML</SelectItem>
                                 <SelectItem value="video">Video</SelectItem>
                                 <SelectItem value="code">Code</SelectItem>
                                 <SelectItem value="quiz">Quiz</SelectItem>
@@ -1246,6 +1272,18 @@ export default function AdminCourseEditorPage() {
                                 }
                                 return <div style={style}>{content}</div>;
                               })()}
+                            </div>
+                          </div>
+                        )}
+                        {b.type === 'html' && (
+                          <div className="mt-2 space-y-2">
+                            <div>
+                              <Label>HTML</Label>
+                              <Textarea value={b.html || ''} onChange={(e) => updateBlock(m.id, b.id, { html: e.target.value })} placeholder="<div class='p-4 text-sm'>Custom content...</div>" />
+                            </div>
+                            <div className="border rounded p-2 bg-muted/30">
+                              <div className="text-xs text-muted-foreground mb-1">Preview (sanitized)</div>
+                              <HtmlRenderer html={b.html || ''} />
                             </div>
                           </div>
                         )}
@@ -1516,6 +1554,7 @@ export default function AdminCourseEditorPage() {
                                       <SelectContent>
                                         <SelectItem value="markdown">Markdown</SelectItem>
                                         <SelectItem value="text">Text</SelectItem>
+                                        <SelectItem value="html">HTML</SelectItem>
                                         <SelectItem value="video">Video</SelectItem>
                                         <SelectItem value="bullets">Bullets</SelectItem>
                                         <SelectItem value="code">Code</SelectItem>
@@ -1556,6 +1595,22 @@ export default function AdminCourseEditorPage() {
                                       <div className="border rounded p-2 bg-muted/30">
                                         <div className="text-xs text-muted-foreground mb-1">Preview</div>
                                         <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{it.content || ''}</ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isCollapsed(`compItem:${m.id}:${b.id}:${it.id || ''}`) && it.kind === 'html' && (
+                                    <div className="space-y-2">
+                                      <div>
+                                        <Label>HTML</Label>
+                                        <Textarea value={it.html || ''} onChange={(e) => {
+                                          const items = [...(b.items || [])];
+                                          items[ii] = { ...it, html: e.target.value };
+                                          updateBlock(m.id, b.id, { items });
+                                        }} />
+                                      </div>
+                                      <div className="border rounded p-2 bg-muted/30">
+                                        <div className="text-xs text-muted-foreground mb-1">Preview (sanitized)</div>
+                                        <HtmlRenderer html={it.html || ''} />
                                       </div>
                                     </div>
                                   )}

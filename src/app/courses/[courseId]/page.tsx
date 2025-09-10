@@ -9,6 +9,7 @@ import { cookies } from 'next/headers';
 import { verifyJWT } from '@/lib/auth';
 import { ensureMongooseConnection } from '@/lib/mongodb';
 import { CourseService, ProgressService } from '@/lib/services/database';
+import CourseOverviewHeader from '@/components/CourseOverviewHeader';
 
 export default async function CoursePage({ params, searchParams }: { params: Promise<{ courseId: string }>, searchParams: Promise<Record<string, string | string[]>> }) {
   const { courseId } = await params;
@@ -39,7 +40,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
   const nextModule = course.modules.find((m: any) => !userCompleted.has(m.id)) || course.modules[0];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 animate-fade-in">
       <ScrollProgressBar />
       <div className="flex items-center gap-2 mb-4">
         <Link href="/">
@@ -65,45 +66,43 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
         </Card>
       </section>
 
-      <section className="mb-6 animate-slide-up" style={{ animationDelay: '80ms' }}>
-        <Card className="rounded-2xl">
-          <CardContent className="p-6 sm:p-8">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{course.title}</h1>
-            <p className="mt-3 text-sm sm:text-base text-muted-foreground line-clamp-3">{course.description}</p>
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">
-                {(course.modules?.length || 0)} modules
-              </div>
-              {nextModule && (
-                <Link href={`/courses/${course.id}/${nextModule.id}`} prefetch>
-                  <Button size="sm" className="bg-primary text-primary-foreground hover:opacity-90 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]">
-                    {completedModulesInCourse === 0 ? 'Start Course' : (completedModulesInCourse < totalModules ? 'Resume' : 'Review')}
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+      <CourseOverviewHeader
+        title={course.title}
+        description={course.description}
+        customHtml={(course as any).customHtml}
+        courseId={course.id}
+        nextModuleId={nextModule?.id}
+        totalModules={course.modules?.length || 0}
+        completedModulesInCourse={completedModulesInCourse}
+      />
 
       <div className="grid grid-cols-1 gap-6">
-        <div className="space-y-4">
-          <Card className="rounded-xl">
+        <div className="space-y-0">
+          <Card className="rounded-xl border-0">
             <CardHeader>
               <CardTitle>Course Modules</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="rounded-xl border bg-card">
+              <div className="rounded-xl shadow-2xl bg-card">
                 <ol className="divide-y" role="list" aria-label="Course modules">
                   {course.modules.map((module: any, idx: number) => (
                     <li key={module.id} className="p-4 animate-slide-up" style={{ animationDelay: `${Math.min(idx * 60, 540)}ms` }} role="listitem" aria-label={`Module ${module.displayIndex || idx + 1}: ${module.title}`}>
-                      <div className="flex items-start gap-3">
-                        <span className="inline-flex items-center justify-center h-6 min-w-6 rounded-full bg-muted px-2 text-xs font-mono">
-                          {module.displayIndex || idx + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{module.title}</p>
-                        
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className="inline-flex items-center justify-center h-6 min-w-6 rounded-full bg-muted px-2 text-xs font-mono">
+                            {module.displayIndex || idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{module.title}</p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                         
+                          <Link href={`/courses/${course.id}/${module.id}`} prefetch>
+                            <Button size="sm" className="rounded-full">
+                              {userCompleted.has(module.id) ? 'Review' : (idx === 0 || userCompleted.has(course.modules[idx - 1]?.id) ? 'Open' : 'Open')}
+                            </Button>
+                          </Link>
                         </div>
                       </div>
                     </li>

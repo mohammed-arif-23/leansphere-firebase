@@ -275,7 +275,7 @@ export function CodingAssignment({ module, course }: CodingAssignmentProps) {
                             <div className="w-3 h-3 rounded-full bg-yellow-500" />
                             <div className="w-3 h-3 rounded-full bg-green-500" />
                             <span className="ml-4 text-sm font-medium">
-                              {selectedLanguage === 'java' ? 'Main.java' : 
+                              {selectedLanguage === 'java' ? 'main.java' : 
                                selectedLanguage === 'python' ? 'main.py' : 
                                selectedLanguage === 'html' ? 'index.html' : 'main.js'}
                             </span>

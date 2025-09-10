@@ -101,6 +101,23 @@ export default function ModuleNextGate({
   }, []);
 
   const handleNextClick = () => {
+    // Attempt to mark current module as completed in background
+    try {
+      const payload = JSON.stringify({ courseId, moduleId });
+      const blob = new Blob([payload], { type: 'application/json' });
+      // Prefer sendBeacon for reliability during navigation
+      const ok = (navigator as any).sendBeacon?.('/api/learning/progress/complete-module', blob);
+      if (!ok) {
+        // Fallback to fetch with keepalive
+        fetch('/api/learning/progress/complete-module', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch {}
+
     if (nextHref) {
       const nextModuleId = nextHref.split('/').pop();
       if (nextModuleId) {
