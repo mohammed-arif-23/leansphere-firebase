@@ -177,6 +177,8 @@ const CourseSchema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   customHtml: { type: String },
+  // Admin-controlled ordering for lists
+  order: { type: Number, default: 0, index: true },
   language: { 
     type: String, 
     enum: ['Java', 'Python', 'JavaScript', 'General'], 

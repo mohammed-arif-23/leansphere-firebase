@@ -40,7 +40,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
   const nextModule = course.modules.find((m: any) => !userCompleted.has(m.id)) || course.modules[0];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 animate-fade-in">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
       <ScrollProgressBar />
       <div className="flex items-center gap-2 mb-4">
         <Link href="/">

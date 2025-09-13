@@ -7,6 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function CoursesPage() {
   const token = (await cookies()).get("auth_token")?.value;
   if (!token) redirect("/login?redirect=/courses");

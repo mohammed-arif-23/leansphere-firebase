@@ -12,28 +12,16 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'placehold.co',
+        hostname: '**',
         port: '',
         pathname: '/**',
       },
       {
-        protocol: 'https',
-        hostname: 'picsum.photos',
+        protocol: 'http',
+        hostname: '**',
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'www.hostinger.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'drive.google.com',
-        port: '',
-        pathname: '/**',
-      }
     ],
   },
 };

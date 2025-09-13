@@ -56,7 +56,13 @@ export const CourseService = {
     const { skip, limit, page } = buildPagination(pagination);
 
     const [items, total] = await Promise.all([
-      models.Course.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().exec(),
+      models.Course
+        .find(query)
+        .sort({ order: 1 as any, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
       models.Course.countDocuments(query),
     ]);
 

@@ -36,6 +36,7 @@ const CourseSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  order: z.number().int().nonnegative().default(0),
   language: z.enum(['Java', 'Python', 'JavaScript', 'General']).default('General'),
   difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
   estimatedHours: z.number().int().nonnegative().default(1),
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
   const skip = (page - 1) * limit;
 
   const [items, total] = await Promise.all([
-    models.Course.find({}).sort({ updatedAt: -1 }).skip(skip).limit(limit).lean().exec(),
+    models.Course.find({}).sort({ order: 1 as any, updatedAt: -1 }).skip(skip).limit(limit).lean().exec(),
     models.Course.countDocuments({}).exec(),
   ]);
 

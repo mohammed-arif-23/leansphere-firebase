@@ -17,6 +17,9 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
   const [firedComplete, setFiredComplete] = useState(false);
   const isDrivePreview = /https?:\/\/drive\.google\.com\/.+\/preview/.test(src);
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const isHlsManifest = /\.m3u8(\?.*)?$/i.test(src);
+  const isTsFile = /\.ts(\?.*)?$/i.test(src);
+  const [tsDirectFallback, setTsDirectFallback] = useState(false);
   const normalizedRequired = (() => {
     const p = Number(requiredPercent);
     if (!Number.isFinite(p) || p <= 0) return 0;
@@ -38,6 +41,78 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
     }
     const v = videoRef.current;
     if (!v) return;
+
+    // Setup HLS playback for .m3u8 URLs when needed
+    let hls: any | null = null;
+    let hlsDestroyed = false;
+    // Setup MPEG-TS playback for standalone .ts via mpegts.js
+    let mpegts: any | null = null;
+    let mpegtsPlayer: any | null = null;
+
+    const setupHlsIfNeeded = async () => {
+      // If browser has native HLS support, let the <video> element handle it
+      const canNativeHls = (v.canPlayType('application/vnd.apple.mpegurl') || '').length > 0;
+      if (isHlsManifest) {
+        if (canNativeHls) {
+          // Use native playback (mainly Safari/iOS)
+          if (v.src !== src) v.src = src;
+          return;
+        }
+        try {
+          const mod = await import('hls.js');
+          const Hls = (mod as any).default || (mod as any);
+          if (Hls && Hls.isSupported && Hls.isSupported()) {
+            hls = new Hls();
+            hls.loadSource(src);
+            hls.attachMedia(v);
+          } else {
+            // Fallback: try assigning directly; some browsers might still handle certain streams
+            if (v.src !== src) v.src = src;
+          }
+        } catch {
+          // If hls.js failed to load, fallback to direct src
+          if (v.src !== src) v.src = src;
+        }
+      } else {
+        // Non-HLS sources: regular assignment handled by JSX
+      }
+    };
+
+    setupHlsIfNeeded();
+
+    const setupMpegTsIfNeeded = async () => {
+      if (!isTsFile || isHlsManifest) return;
+      // Many browsers cannot play raw .ts directly; try mpegts.js via MSE
+      try {
+        const mod = await import('mpegts.js');
+        mpegts = (mod as any).default || (mod as any);
+        if (mpegts && mpegts.isSupported && mpegts.isSupported()) {
+          mpegtsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: false, url: src });
+          // If network errors happen (e.g., 404), fall back to direct source rendering
+          try {
+            mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, data: any) => {
+              if (type === mpegts.ErrorTypes.NETWORK_ERROR) {
+                console.warn('[mpegts.js] network error; falling back to direct <source>', { detail, data });
+                setTsDirectFallback(true);
+                try { mpegtsPlayer?.destroy?.(); } catch {}
+              }
+            });
+          } catch {}
+          mpegtsPlayer.attachMediaElement(v);
+          mpegtsPlayer.load();
+          // Do not autoplay; respect user gesture policies
+          setTsDirectFallback(false);
+        } else {
+          setTsDirectFallback(true);
+        }
+      } catch (e) {
+        console.warn('[mpegts.js] dynamic import failed; falling back to direct <source>', e);
+        // Fall back to direct <source>, which we render below
+        setTsDirectFallback(true);
+      }
+    };
+
+    setupMpegTsIfNeeded();
 
     const onTimeUpdate = async () => {
       if (!v || !v.duration || Number.isNaN(v.duration) || v.duration === Infinity) return;
@@ -108,8 +183,20 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
       v.removeEventListener('timeupdate', onTimeUpdate);
       v.removeEventListener('loadedmetadata', onLoadedMetadata);
       v.removeEventListener('ended', onEnded);
+      try {
+        if (hls && typeof hls.destroy === 'function' && !hlsDestroyed) {
+          hls.destroy();
+          hlsDestroyed = true;
+        }
+      } catch {}
+      try {
+        if (mpegtsPlayer && typeof mpegtsPlayer.destroy === 'function') {
+          mpegtsPlayer.destroy();
+          mpegtsPlayer = null;
+        }
+      } catch {}
     };
-  }, [courseId, moduleId, contentBlockId, required, normalizedRequired, firedComplete, isDrivePreview]);
+  }, [courseId, moduleId, contentBlockId, required, normalizedRequired, firedComplete, isDrivePreview, isHlsManifest, isTsFile, src]);
 
   if (isDrivePreview) {
     const markWatched = async () => {
@@ -159,7 +246,25 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
 
   return (
     <div>
-      <video ref={videoRef} controls poster={poster} className="w-full rounded" src={src} />
+      {/* For HLS (.m3u8), the src is attached programmatically (hls.js or native). For others, we use <source> elements. */}
+      <video
+        ref={videoRef}
+        controls
+        poster={poster}
+        className="w-full rounded"
+        playsInline
+        crossOrigin="anonymous"
+      >
+        {/* Only render a direct source when not using HLS. For .ts, render only if mpegts.js is unavailable */}
+        {!isHlsManifest && !isTsFile && (
+          <source src={src} />
+        )}
+        {!isHlsManifest && isTsFile && tsDirectFallback && (
+          <source src={src} type="video/mp2t" />
+        )}
+        {/* Optional fallback text */}
+        Your browser does not support the video tag.
+      </video>
       {required && !firedComplete && remainingSec !== null && (
         <div className="mt-2 text-xs text-muted-foreground">Watch approximately {fmt(remainingSec)} more to unlock</div>
       )}
