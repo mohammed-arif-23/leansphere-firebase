@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ModuleTimer from '@/components/course/ModuleTimer';
 
 type Props = {
   src: string;
@@ -17,6 +18,7 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
   const [firedComplete, setFiredComplete] = useState(false);
   const isDrivePreview = /https?:\/\/drive\.google\.com\/.+\/preview/.test(src);
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const [unlockProgress, setUnlockProgress] = useState<number>(0); // 0..1 toward required threshold
   const isHlsManifest = /\.m3u8(\?.*)?$/i.test(src);
   const isTsFile = /\.ts(\?.*)?$/i.test(src);
   const [tsDirectFallback, setTsDirectFallback] = useState(false);
@@ -31,6 +33,12 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
     const m = Math.floor(sec / 60);
     const r = sec % 60;
     return m > 0 ? `${m}m ${r}s` : `${r}s`;
+  };
+  const fmtClock = (s: number) => {
+    const sec = Math.max(0, Math.floor(s));
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const r = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${r}`;
   };
 
   useEffect(() => {
@@ -120,6 +128,7 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
       if (required) {
         const targetTime = normalizedRequired * v.duration;
         setRemainingSec(Math.ceil(Math.max(0, targetTime - v.currentTime)));
+        setUnlockProgress(Math.max(0, Math.min(1, v.currentTime / targetTime)));
       }
       // send heartbeat occasionally
       try {
@@ -154,6 +163,7 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
       if (required) {
         const targetTime = normalizedRequired * v.duration;
         setRemainingSec(Math.ceil(Math.max(0, targetTime - v.currentTime)));
+        setUnlockProgress(Math.max(0, Math.min(1, v.currentTime / targetTime)));
       }
     };
 
@@ -229,7 +239,8 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
           />
         </div>
         {required && (
-          <div className="mt-3">
+          <div className="mt-3 flex items-center gap-6 justify-between">
+            <ModuleTimer title="Required Watch time to Unlock next" compact showControls={false} progressPercent={firedComplete ? 100 : 0} />
             <button
               type="button"
               className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm ${firedComplete ? 'bg-green-600 text-white' : 'bg-primary text-primary-foreground hover:opacity-90'}`}
@@ -265,8 +276,16 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
         {/* Optional fallback text */}
         Your browser does not support the video tag.
       </video>
-      {required && !firedComplete && remainingSec !== null && (
-        <div className="mt-2 text-xs text-muted-foreground">Watch approximately {fmt(remainingSec)} more to unlock</div>
+      {required && (
+        <div className="mt-2">
+          <ModuleTimer
+            title="Required Watch time to Unlock next"
+            compact
+            showControls={false}
+            remainingSeconds={remainingSec ?? 0}
+            progressPercent={Math.round((firedComplete ? 1 : unlockProgress) * 100)}
+          />
+        </div>
       )}
     </div>
   );

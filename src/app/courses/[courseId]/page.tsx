@@ -97,12 +97,17 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
                           </div>
                         </div>
                         <div className="shrink-0 flex items-center gap-2">
-                         
-                          <Link href={`/courses/${course.id}/${module.id}`} prefetch>
-                            <Button size="sm" className="rounded-full">
-                              {userCompleted.has(module.id) ? 'Review' : (idx === 0 || userCompleted.has(course.modules[idx - 1]?.id) ? 'Open' : 'Open')}
+                          {userCompleted.has(module.id) ? (
+                            <Link href={`/courses/${course.id}/${module.id}`} prefetch>
+                              <Button size="sm" className="rounded-full">
+                                Review
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Button size="sm" className="rounded-full" disabled aria-disabled>
+                              Open
                             </Button>
-                          </Link>
+                          )}
                         </div>
                       </div>
                     </li>

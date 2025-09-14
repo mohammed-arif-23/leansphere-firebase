@@ -3,7 +3,7 @@ import './globals.css';
 // Prism theme: using higher-contrast Tomorrow theme for better HTML/CSS visibility
 import 'prismjs/themes/prism-tomorrow.css';
 import { Toaster } from "@/components/ui/toaster";
-import Header from '@/components/layout/Header';
+import Header from "@/components/layout/Header";
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 import BottomTabs from '@/components/layout/BottomTabs';
 
@@ -50,9 +50,9 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
-      <body className="font-body antialiased min-h-screen flex flex-col bg-background text-foreground">
+      <body className="font-body antialiased min-h-screen flex flex-col bg-white text-foreground">
         <Header />
-        <main className="flex-grow pb-14 pt-24 sm:pb-24 md:pb-0">{children}</main>
+        <main className="flex-grow pb-14 pt-20 sm:pb-24 md:pb-0">{children}</main>
         <BottomTabs />
         <Toaster />
         <ServiceWorkerRegister />

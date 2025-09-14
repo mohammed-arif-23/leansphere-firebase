@@ -406,14 +406,11 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
         <div className="container py-6 mx-auto px-4 sm:px-6 lg:px-8 mb-4">
           <div className="mx-auto w-full max-w-2xl">
             <div
-              className="group block rounded-2xl border bg-card p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+              className="group block rounded-2xl bg-card p-4 sm:p-5hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-xs text-muted-foreground">Up next</div>
-                  <h3 className="mt-1 font-semibold text-lg truncate">
-                    {nextModule.displayIndex ? `${nextModule.displayIndex}. ` : ''}{nextModule.title}
-                  </h3>
+                  <div className="text-sm text-muted-foreground">Next - <span className="font-semibold">{nextModule.title}</span></div>
                   {nextModule.description && (
                     <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{nextModule.description}</p>
                   )}
@@ -428,19 +425,6 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
       {!nextModule && (
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 mb-4">
           <div className="mx-auto w-full max-w-2xl">
-            <div className="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">🎉</div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-lg">Course finished</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Great job finishing this course. You can review the course overview or browse other courses.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Link href={`/courses/${course.id}`} className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-primary text-primary-foreground text-sm hover:opacity-90">Finish course</Link>
-                    <Link href={`/courses`} className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-muted text-foreground text-sm hover:bg-muted/80">Browse courses</Link>
-                  </div>
-                </div>
-              </div>
-            </div>
             <CompletionEffects courseId={course.id} courseTitle={course.title} />
           </div>
         </div>

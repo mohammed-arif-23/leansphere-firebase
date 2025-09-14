@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, Lock, CheckCircle, Circle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import Link from "next/link";
 import { useAnalytics } from "../../hooks/useAnalytics";
 
@@ -135,51 +134,19 @@ export default function ModuleNextGate({
     }
   };
 
-  const completedCount = currentRequiredBlocks.filter(block => block.completed).length;
   const totalRequired = currentRequiredBlocks.length;
-  const progressPercentage = totalRequired > 0 ? (completedCount / totalRequired) * 100 : 100;
-
-  const getBlockTypeEmoji = (type: string) => {
-    switch (type) {
-      case 'quiz': return '❓';
-      case 'assignment': return '📚';
-      case 'code': return '💻';
-      case 'video': return '🎥';
-      default: return '📝';
-    }
-  };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t md:hidden">
       {/* Progress indicator when locked */}
       {isLocked && totalRequired > 0 && (
-        <Card className="mx-4 mb-2 -mt-2 border-amber-200 bg-amber-50">
+        <Card className="mx-4 mb-2 -mt-2 border-amber-300 bg-amber-50/90 shadow-lg ring-1 ring-amber-300">
           <CardContent className="p-3">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-amber-800">
-                  Complete required tasks to unlock next module
-                </span>
-                <span className="text-amber-600">
-                  {completedCount}/{totalRequired}
-                </span>
-              </div>
-              <Progress value={progressPercentage} className="h-2" />
-              <div className="space-y-1 max-h-24 overflow-y-auto">
-                {currentRequiredBlocks.map((block) => (
-                  <div key={block.id} className="flex items-center gap-2 text-xs">
-                    {block.completed ? (
-                      <CheckCircle className="h-3 w-3 text-green-600 flex-shrink-0" />
-                    ) : (
-                      <Circle className="h-3 w-3 text-amber-600 flex-shrink-0" />
-                    )}
-                    <span className="flex-shrink-0">{getBlockTypeEmoji(block.type)}</span>
-                    <span className={`truncate ${block.completed ? 'text-green-800 line-through' : 'text-amber-800'}`}>
-                      {block.title}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center gap-2 text-[13px]">
+              <Lock className="h-4 w-4 text-amber-700" />
+              <span className="font-semibold text-amber-900">
+                Complete required items in this module to unlock the next
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -208,11 +175,11 @@ export default function ModuleNextGate({
               variant="outline" 
               size="sm" 
               disabled 
-              aria-label={`Next module locked - complete ${Math.max(totalRequired - completedCount, 0)} more required tasks`}
+              aria-label={`Next module locked - complete required items`}
               aria-describedby="next-locked-description"
             >
               <Lock className="mr-2 h-4 w-4" />
-              Locked ({Math.max(totalRequired - completedCount, 0)} left)
+              Locked
             </Button>
           ) : (
             <Link href={nextHref} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]">
@@ -237,7 +204,7 @@ export default function ModuleNextGate({
       
       {isLocked && (
         <div id="next-locked-description" className="sr-only">
-          Complete {totalRequired - completedCount} more required tasks in this module to unlock the next module
+          Complete required items in this module to unlock the next module
         </div>
       )}
     </div>

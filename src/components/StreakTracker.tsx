@@ -26,66 +26,64 @@ export default function StreakTracker() {
   const { track } = useAnalytics();
 
   useEffect(() => {
-    loadStreakData();
+    // Load weekly goal preference
+    try {
+      const prefsRaw = localStorage.getItem('streak_prefs');
+      if (prefsRaw) {
+        const prefs = JSON.parse(prefsRaw);
+        if (typeof prefs.weeklyGoal === 'number') {
+          setStreakData(prev => ({ ...prev, weeklyGoal: prefs.weeklyGoal }));
+        }
+      }
+    } catch {}
+
+    loadStreakFromServer();
   }, []);
 
-  const loadStreakData = () => {
-    const saved = localStorage.getItem('dynamit_streak');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setStreakData(data);
-        
-        // Check if streak should be reset (missed a day)
-        const today = new Date().toDateString();
-        const lastActive = new Date(data.lastActiveDate).toDateString();
-        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-        
-        if (lastActive !== today && lastActive !== yesterday) {
-          // Reset streak if more than 1 day gap
-          const resetData = { ...data, currentStreak: 0 };
-          setStreakData(resetData);
-          localStorage.setItem('dynamit_streak', JSON.stringify(resetData));
-        }
-      } catch (error) {
-        console.warn('Failed to load streak data:', error);
-      }
-    }
-  };
-
-  const updateStreak = () => {
-    const today = new Date().toDateString();
-    const lastActive = new Date(streakData.lastActiveDate).toDateString();
-    
-    if (lastActive === today) {
-      return; // Already updated today
-    }
-
-    const newStreak = lastActive === new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString() 
-      ? streakData.currentStreak + 1 
-      : 1;
-
-    const newData = {
-      ...streakData,
-      currentStreak: newStreak,
-      longestStreak: Math.max(streakData.longestStreak, newStreak),
-      lastActiveDate: new Date().toISOString(),
-      weeklyProgress: getWeeklyProgress() + 1
-    };
-
-    setStreakData(newData);
-    localStorage.setItem('dynamit_streak', JSON.stringify(newData));
-
-    // Track streak milestone
-    if (newStreak > 0 && newStreak % 7 === 0) {
-      track({
-        event: 'streak_milestone',
-        properties: { streak_days: newStreak }
+  const loadStreakFromServer = async () => {
+    try {
+      const res = await fetch('/api/learning/streak', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch streak');
+      const data = await res.json();
+      setStreakData(prev => {
+        const currentStreak = Number(data.currentStreak || 0);
+        return {
+          ...prev,
+          currentStreak,
+          longestStreak: Number(data.longestStreak || 0),
+          lastActiveDate: data.lastActiveDate || '',
+          weeklyProgress: getWeeklyProgress(currentStreak),
+        };
       });
+    } catch (e) {
+      // Fail silently; UI will show 0
+      console.warn('Streak fetch failed', e);
     }
   };
 
-  const getWeeklyProgress = () => {
+  const updateStreak = async () => {
+    try {
+      const res = await fetch('/api/learning/streak', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to update streak');
+      const data = await res.json();
+      const newStreak = Number(data.currentStreak || 0);
+      setStreakData(prev => ({
+        ...prev,
+        currentStreak: newStreak,
+        longestStreak: Math.max(Number(data.longestStreak || 0), newStreak),
+        lastActiveDate: data.lastActiveDate || new Date().toISOString(),
+        weeklyProgress: getWeeklyProgress(newStreak)
+      }));
+
+      if (newStreak > 0 && newStreak % 7 === 0) {
+        track({ event: 'streak_milestone', properties: { streak_days: newStreak } });
+      }
+    } catch (e) {
+      console.warn('Streak update failed', e);
+    }
+  };
+
+  const getWeeklyProgress = (streakOverride?: number) => {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
@@ -94,13 +92,14 @@ export default function StreakTracker() {
     // For now, calculate based on current streak
     const today = new Date();
     const daysSinceWeekStart = today.getDay();
-    return Math.min(streakData.currentStreak, daysSinceWeekStart + 1);
+    const s = streakOverride ?? streakData.currentStreak;
+    return Math.min(s, daysSinceWeekStart + 1);
   };
 
   const setWeeklyGoal = (goal: number) => {
     const newData = { ...streakData, weeklyGoal: goal };
     setStreakData(newData);
-    localStorage.setItem('dynamit_streak', JSON.stringify(newData));
+    try { localStorage.setItem('streak_prefs', JSON.stringify({ weeklyGoal: goal })); } catch {}
     setShowGoalSetter(false);
     
     track({
@@ -111,10 +110,11 @@ export default function StreakTracker() {
 
   // Call this when user completes a lesson
   useEffect(() => {
-    const handleLessonComplete = () => updateStreak();
+    const handleLessonComplete = () => { void updateStreak(); };
     window.addEventListener('lessonCompleted', handleLessonComplete);
     return () => window.removeEventListener('lessonCompleted', handleLessonComplete);
-  }, [streakData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const weeklyProgressPercent = Math.min((streakData.weeklyProgress / streakData.weeklyGoal) * 100, 100);
 
