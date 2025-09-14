@@ -48,7 +48,7 @@ export default async function HomePage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
           <div className="max-w-3xl">
             <div className="text-sm text-muted-foreground mb-2 uppercase">dynamit</div>
-            <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight">Welcome{auth?.name ? `, ${auth.name}` : (auth?.sub ? `, ${auth.sub}` : '')}</h1>
+            {auth?.name ? <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight">Welcome{auth?.name ? `, ${auth.name}` : (auth?.sub ? `, ${auth.sub}` : '')}</h1> : <h1 className="text-lg sm:text-lg font-extrabold tracking-tight">Login to continue</h1>}
             <p className="mt-4 text-md sm:text-md text-muted-foreground">A minimal, fast and focused learning space.</p>
             <div className="mt-6 flex flex-wrap gap-3">
               {auth?.sub ? (
