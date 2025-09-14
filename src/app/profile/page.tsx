@@ -10,6 +10,7 @@ import { ensureMongooseConnection } from "@/lib/mongodb";
 import { AchievementService } from "@/lib/services/database";
 import { Achievement } from "@/types";
 import StreakTracker from '@/components/StreakTracker';
+import Link from "next/link";
 // SkillTree removed per request
 
 export default async function ProfilePage() {
@@ -63,6 +64,14 @@ export default async function ProfilePage() {
               )}
             </CardContent>
           </Card>
+          {/* Back to Home button - use Next.js Link to keep navigation in WebView */}
+          <div className="flex justify-center">
+            <Link href="https://avsec-it.vercel.app/" >
+              <Button className="rounded-full" size="sm">
+                Back to Home
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
