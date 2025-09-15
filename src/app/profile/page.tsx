@@ -30,10 +30,10 @@ export default async function ProfilePage() {
         <div className="space-y-6">
           <Card className="rounded-xl shadow-sm">
            <CardContent className="pt-6">
-             <div className="flex flex-col items-center text-center">
-               <Avatar className="w-24 h-24 mb-4 border-4 border-primary">
+             <div className="flex flex-col items-center text-center ">
+               <Avatar className="w-24 h-24 mb-4  border-4 border-primary">
                  <AvatarImage src={auth.picture || ''} alt={auth.name || auth.sub} />
-                 <AvatarFallback>{(auth.name || auth.sub || 'U').charAt(0).toUpperCase()}</AvatarFallback>
+                 <AvatarFallback className="shine">{(auth.name || auth.sub || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                </Avatar>
                <h1 className="text-2xl font-bold leading-tight">{auth.name || auth.sub}</h1>
                <p className="text-muted-foreground flex items-center gap-2 mt-1">
@@ -67,7 +67,7 @@ export default async function ProfilePage() {
           {/* Back to Home button - use Next.js Link to keep navigation in WebView */}
           <div className="flex justify-center">
             <Link href="https://avsec-it.vercel.app/" >
-              <Button className="rounded-full" size="sm">
+              <Button className="rounded-full shine" size="sm">
                 Back to Home
               </Button>
             </Link>

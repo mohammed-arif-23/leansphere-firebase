@@ -2031,7 +2031,7 @@ export default function AdminCourseEditorPage() {
                               <Label>Questions</Label>
                               <Button size="sm" onClick={() => {
                                 const q = (b.quiz?.questions || []);
-                                const next = [...q, { id: `q-${Date.now()}`, text: '', options: ['', ''], correctIndex: 0 }];
+                                const next = [...q, { id: `q-${Date.now()}`, text: '', options: ['', '', '', ''], correctIndex: 0 }];
                                 updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: next } });
                               }}>Add Question</Button>
                             </div>
@@ -2074,23 +2074,11 @@ export default function AdminCourseEditorPage() {
                                               qs[qi] = { ...q, correctIndex: oi };
                                               updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
                                             }} />
-                                            <Button size="sm" variant="outline" onClick={() => {
-                                              const qs = [...(b.quiz?.questions || [])];
-                                              const arr = (q.options || []).filter((_: any, idx: number) => idx !== oi);
-                                              const newCorrect = q.correctIndex > oi ? q.correctIndex - 1 : q.correctIndex === oi ? 0 : q.correctIndex;
-                                              qs[qi] = { ...q, options: arr, correctIndex: Math.max(0, Math.min(newCorrect, arr.length - 1)) };
-                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                            }}>Remove</Button>
+                                            <Button size="sm" variant="outline" disabled title="Fixed to 4 options">Remove</Button>
                                           </div>
                                         </div>
                                       ))}
-                                      <Button size="sm" onClick={() => {
-                                        const qs = [...(b.quiz?.questions || [])];
-                                        const arr = [...(q.options || [])];
-                                        arr.push('');
-                                        qs[qi] = { ...q, options: arr };
-                                        updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                      }}>Add Option</Button>
+                                      <div className="text-xs text-muted-foreground">Exactly 4 options are used per question.</div>
                                     </div>
                                   </div>
                                 </div>

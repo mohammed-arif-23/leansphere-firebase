@@ -24,7 +24,7 @@ export default function Header() {
         "bg-white border-b border-white/10"
       )}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-2 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-center">
           {/* Logo Section */}
           <Link 
@@ -32,7 +32,7 @@ export default function Header() {
             className="flex items-center group transition-all duration-300 ease-out hover:-translate-y-0.5 hover:opacity-100 focus:opacity-100"
             style={{ opacity: 1, visibility: 'visible' }}
           >
-            <div className="relative h-12 w-[300px] sm:w-[360px] overflow-hidden rounded-xl">
+            <div className="relative h-12 w-[400px] sm:w-[460px] overflow-hidden rounded-xl">
               <div className="absolute inset-0 bg-white/20 backdrop-blur-sm rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <Image 
                 src="/logo.png" 

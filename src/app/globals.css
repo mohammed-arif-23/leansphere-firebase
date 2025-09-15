@@ -478,6 +478,43 @@
     animation: shimmer-enhanced 1.5s infinite ease-in-out;
   }
 
+  /* Shining sweep utility for badges/pills */
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shine::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -150%;
+    height: 100%;
+    width: 50%;
+    background: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-20deg);
+    animation: shine-sweep 1s infinite;
+  }
+
+  @keyframes shine-sweep {
+    0% { left: -150%; }
+    60% { left: 150%; }
+    100% { left: 150%; }
+  }
+
+  /* Scoped media-controls tweaks: hide WebKit timeline only when parent opts-in */
+  @supports (-webkit-appearance: none) {
+    .no-timeline video::-webkit-media-controls-timeline,
+    .no-timeline audio::-webkit-media-controls-timeline {
+      display: none !important;
+    }
+  }
+
   /* Custom Scrollbar */
   ::-webkit-scrollbar {
     width: 8px;

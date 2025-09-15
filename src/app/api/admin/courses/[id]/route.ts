@@ -139,7 +139,49 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   try {
     await ensureMongooseConnection();
     const json = await req.json();
-    const parsed = CourseSchema.safeParse(json);
+
+    // Normalize quiz payloads from admin shape into API schema shape
+    const normalized = (() => {
+      try {
+        const course = structuredClone(json);
+        const modules = Array.isArray(course?.modules) ? course.modules : [];
+        for (const m of modules) {
+          const blocks = Array.isArray(m?.contentBlocks) ? m.contentBlocks : [];
+          for (const b of blocks) {
+            if (b?.type === 'quiz' && b.quiz) {
+              const qz = b.quiz;
+              const qs = Array.isArray(qz.questions) ? qz.questions : [];
+              b.quiz.questions = qs.map((q: any, qi: number) => {
+                const question = String(q.question ?? q.text ?? '');
+                const rawOpts = Array.isArray(q.options) ? q.options : [];
+                const options = rawOpts.map((op: any, oi: number) => ({ id: String(op?.id ?? `o-${qi}-${oi}`), text: String(typeof op === 'string' ? op : (op?.text ?? '')) }));
+                const correctOptionId = (() => {
+                  if (q.correctOptionId) return String(q.correctOptionId);
+                  const ci = Number(q.correctIndex);
+                  if (Number.isFinite(ci) && ci >= 0 && ci < options.length) return options[ci].id;
+                  return undefined;
+                })();
+                return {
+                  id: String(q.id ?? `q-${qi}`),
+                  question,
+                  type: (q.type === 'true-false' || q.type === 'fill-blank') ? q.type : 'multiple-choice',
+                  options,
+                  correctOptionId,
+                  explanation: q.explanation,
+                  difficulty: q.difficulty ?? 'easy',
+                  points: Number.isFinite(Number(q.points)) ? Number(q.points) : 1,
+                };
+              });
+            }
+          }
+        }
+        return course;
+      } catch {
+        return json;
+      }
+    })();
+
+    const parsed = CourseSchema.safeParse(normalized);
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: { code: 'BAD_REQUEST', message: 'Invalid payload', details: parsed.error.flatten() } }, { status: 400 });
     }

@@ -11,9 +11,12 @@ type Props = {
   contentBlockId: string;
   required?: boolean;
   requiredPercent?: number; // 0..1
+  completed?: boolean; // whether this block is already completed
+  moduleCompleted?: boolean; // whether module is already completed (server-side)
+  studentId?: string; // current logged-in student id for per-user persistence
 };
 
-export default function VideoBlock({ src, poster, courseId, moduleId, contentBlockId, required, requiredPercent = 0.8 }: Props) {
+export default function VideoBlock({ src, poster, courseId, moduleId, contentBlockId, required, requiredPercent = 0.8, completed = false, moduleCompleted = false, studentId }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [firedComplete, setFiredComplete] = useState(false);
   const isDrivePreview = /https?:\/\/drive\.google\.com\/.+\/preview/.test(src);
@@ -22,24 +25,16 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
   const isHlsManifest = /\.m3u8(\?.*)?$/i.test(src);
   const isTsFile = /\.ts(\?.*)?$/i.test(src);
   const [tsDirectFallback, setTsDirectFallback] = useState(false);
+  const [allowSeek, setAllowSeek] = useState<boolean>(Boolean(completed || moduleCompleted));
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const storageKey = (suffix: string) => `lsf:video:${studentId || 'anon'}:${courseId}:${moduleId}:${contentBlockId}:${suffix}`;
+  const lastSavedRef = useRef<number>(-1);
+  const lastBeatAtRef = useRef<number>(0);
   const normalizedRequired = (() => {
     const p = Number(requiredPercent);
     if (!Number.isFinite(p) || p <= 0) return 0;
     return p > 1 ? Math.min(1, p / 100) : Math.min(1, p);
   })();
-
-  const fmt = (s: number) => {
-    const sec = Math.max(0, Math.floor(s));
-    const m = Math.floor(sec / 60);
-    const r = sec % 60;
-    return m > 0 ? `${m}m ${r}s` : `${r}s`;
-  };
-  const fmtClock = (s: number) => {
-    const sec = Math.max(0, Math.floor(s));
-    const m = Math.floor(sec / 60).toString().padStart(2, '0');
-    const r = (sec % 60).toString().padStart(2, '0');
-    return `${m}:${r}`;
-  };
 
   useEffect(() => {
     if (isDrivePreview) {
@@ -56,6 +51,8 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
     // Setup MPEG-TS playback for standalone .ts via mpegts.js
     let mpegts: any | null = null;
     let mpegtsPlayer: any | null = null;
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
 
     const setupHlsIfNeeded = async () => {
       // If browser has native HLS support, let the <video> element handle it
@@ -130,9 +127,11 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
         setRemainingSec(Math.ceil(Math.max(0, targetTime - v.currentTime)));
         setUnlockProgress(Math.max(0, Math.min(1, v.currentTime / targetTime)));
       }
-      // send heartbeat occasionally
+      // send heartbeat at most once per minute
       try {
-        if (Math.floor(v.currentTime) % 10 === 0) {
+        const now = Date.now();
+        if (!lastBeatAtRef.current || now - lastBeatAtRef.current >= 60000) {
+          lastBeatAtRef.current = now;
           await fetch('/api/learning/progress/update-self', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ courseId, moduleId, contentBlockId, update: { videoProgress: { watchedDuration: Math.floor(v.currentTime), totalDuration: Math.floor(v.duration), lastPosition: Math.floor(v.currentTime) } } })
@@ -142,6 +141,7 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
 
       if (required && !firedComplete && percent >= normalizedRequired) {
         setFiredComplete(true);
+        setAllowSeek(true);
         try {
           await fetch('/api/learning/progress/complete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -160,6 +160,15 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
 
     const onLoadedMetadata = () => {
       if (!v || !v.duration || Number.isNaN(v.duration) || v.duration === Infinity) return;
+      // Restore last saved position for this student if available
+      try {
+        const saved = Number(localStorage.getItem(storageKey('lastPosition')) || '0');
+        if (Number.isFinite(saved) && saved > 0 && saved < v.duration) {
+          // Jump to saved and set boundaries so guard doesn't snap back
+          v.currentTime = saved;
+     
+        }
+      } catch {}
       if (required) {
         const targetTime = normalizedRequired * v.duration;
         setRemainingSec(Math.ceil(Math.max(0, targetTime - v.currentTime)));
@@ -189,10 +198,32 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
     v.addEventListener('timeupdate', onTimeUpdate);
     v.addEventListener('loadedmetadata', onLoadedMetadata);
     v.addEventListener('ended', onEnded);
+    // Also listen to a global module unlock event to allow seeking immediately
+    const onModuleUnlock = () => setAllowSeek(true);
+    try { window.addEventListener('module-unlock', onModuleUnlock as any); } catch {}
+    v.addEventListener('play', onPlay);
+    v.addEventListener('pause', onPause);
+
+    // Save playback position every 500ms (0.5s resolution)
+    const saveInterval = window.setInterval(() => {
+      try {
+        if (!v || !Number.isFinite(v.currentTime) || !Number.isFinite(v.duration)) return;
+        const pos = Math.round(v.currentTime * 2) / 2; // nearest 0.5s
+        if (pos !== lastSavedRef.current) {
+          localStorage.setItem(storageKey('lastPosition'), String(pos));
+          localStorage.setItem(storageKey('totalDuration'), String(Math.round((v.duration || 0) * 2) / 2));
+          lastSavedRef.current = pos;
+        }
+      } catch {}
+    }, 500);
     return () => {
       v.removeEventListener('timeupdate', onTimeUpdate);
       v.removeEventListener('loadedmetadata', onLoadedMetadata);
       v.removeEventListener('ended', onEnded);
+      v.removeEventListener('play', onPlay);
+      v.removeEventListener('pause', onPause);
+      try { window.removeEventListener('module-unlock', onModuleUnlock as any); } catch {}
+      try { window.clearInterval(saveInterval); } catch {}
       try {
         if (hls && typeof hls.destroy === 'function' && !hlsDestroyed) {
           hls.destroy();
@@ -206,7 +237,14 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
         }
       } catch {}
     };
-  }, [courseId, moduleId, contentBlockId, required, normalizedRequired, firedComplete, isDrivePreview, isHlsManifest, isTsFile, src]);
+  }, [courseId, moduleId, contentBlockId, required, normalizedRequired, firedComplete, isDrivePreview, isHlsManifest, isTsFile, src, allowSeek]);
+
+  // Removed JS seek-lock and double-tap handlers per CSS-only approach
+
+  // If server indicates completion initially (block or module), allow seeking immediately
+  useEffect(() => {
+    if (completed || moduleCompleted) setAllowSeek(true);
+  }, [completed, moduleCompleted]);
 
   if (isDrivePreview) {
     const markWatched = async () => {
@@ -257,25 +295,33 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
 
   return (
     <div>
-      {/* For HLS (.m3u8), the src is attached programmatically (hls.js or native). For others, we use <source> elements. */}
-      <video
-        ref={videoRef}
-        controls
-        poster={poster}
-        className="w-full rounded"
-        playsInline
-        crossOrigin="anonymous"
-      >
-        {/* Only render a direct source when not using HLS. For .ts, render only if mpegts.js is unavailable */}
-        {!isHlsManifest && !isTsFile && (
-          <source src={src} />
-        )}
-        {!isHlsManifest && isTsFile && tsDirectFallback && (
-          <source src={src} type="video/mp2t" />
-        )}
-        {/* Optional fallback text */}
-        Your browser does not support the video tag.
-      </video>
+      <div className={`relative w-full rounded-2xl overflow-hidden bg-black ${!allowSeek ? 'no-timeline' : ''}`}>
+        <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/10" />
+        <video
+          ref={videoRef}
+          controls
+          poster={poster}
+          className="w-full aspect-video object-contain bg-black"
+          playsInline
+          crossOrigin="anonymous"
+          controlsList="nodownload"
+          disablePictureInPicture
+        >
+          {!isHlsManifest && !isTsFile && (
+            <source src={src} />
+          )}
+          {!isHlsManifest && isTsFile && tsDirectFallback && (
+            <source src={src} type="video/mp2t" />
+          )}
+          {/* Optional fallback text */}
+          Your browser does not support the video tag.
+        </video>
+
+        
+
+        {/* Subtle bottom gradient for aesthetics */}
+      </div>
+
       {required && (
         <div className="mt-2">
           <ModuleTimer

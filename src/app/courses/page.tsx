@@ -31,15 +31,15 @@ export default async function CoursesPage() {
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-lg truncate">{c.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{c.description}</p>
+                  <h3 className="font-semibold text-lg ">{c.title}</h3>
+                  <p className="text-xs text-muted-foreground line-clamp-3 mt-1">{c.description}</p>
                   <div className="mt-2 text-xs text-muted-foreground">
                     {(c.modules?.length || 0)} modules
                   </div>
                 </div>
                 <div className="shrink-0">
                   <Link href={`/courses/${c.id}`}>
-                    <Button className="rounded-full">View</Button>
+                    <Button className="rounded-full shine">View</Button>
                   </Link>
                 </div>
               </div>

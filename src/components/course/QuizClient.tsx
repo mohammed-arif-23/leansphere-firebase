@@ -34,14 +34,34 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
   const [score, setScore] = useState(0);
   const [correctness, setCorrectness] = useState<Record<string, boolean>>({});
 
-  const totalPoints = useMemo(() => {
-    return (quiz.questions || []).reduce((acc, q) => acc + (q.points || 1), 0);
+  // Normalize quiz data: support admin shape {text, options: string[], correctIndex}
+  const normalized = useMemo(() => {
+    const srcQs: any[] = Array.isArray(quiz?.questions) ? quiz.questions : [];
+    const qs = srcQs.map((q: any, qi: number) => {
+      const id = String(q.id || `q-${qi}`);
+      const question = String(q.question || q.text || '');
+      const type: any = q.type || 'multiple-choice';
+      const rawOpts: any[] = Array.isArray(q.options) ? q.options : [];
+      const options: QuizOption[] = rawOpts.map((opt: any, oi: number) => ({ id: String(opt?.id || `o-${qi}-${oi}`), text: String(typeof opt === 'string' ? opt : (opt?.text ?? '')) }));
+      const correctOptionId: string | undefined = (() => {
+        if (q.correctOptionId) return String(q.correctOptionId);
+        const idx = Number(q.correctIndex);
+        if (Number.isFinite(idx) && idx >= 0 && idx < options.length) return options[idx].id;
+        return undefined;
+      })();
+      const points = Number.isFinite(Number(q.points)) ? Number(q.points) : 1;
+      return { id, question, type, options, correctOptionId, explanation: q.explanation, difficulty: q.difficulty, points } as QuizQuestion;
+    });
+    const totalPoints = qs.reduce((acc, q) => acc + (q.points || 1), 0);
+    return { questions: qs, passingScore: Number(quiz?.passingScore) || 0, allowRetakes: quiz?.allowRetakes !== false, maxAttempts: quiz?.maxAttempts, totalPoints } as Quiz & { totalPoints: number };
   }, [quiz]);
+
+  const totalPoints = normalized.totalPoints;
 
   const onSubmit = async () => {
     let s = 0;
     const corr: Record<string, boolean> = {};
-    for (const q of quiz.questions || []) {
+    for (const q of normalized.questions || []) {
       const ans = (answers[q.id] || '').trim();
       if (q.type === 'multiple-choice' || q.type === 'true-false') {
         if (q.correctOptionId && ans === q.correctOptionId) {
@@ -63,7 +83,7 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
     setScore(s);
     setSubmitted(true);
     setCorrectness(corr);
-    const passed = s >= (quiz.passingScore || 0);
+    const passed = s >= (normalized.passingScore || 0);
     if (passed && courseId && moduleId && contentBlockId) {
       try {
         await fetch('/api/learning/progress/complete', {
@@ -77,12 +97,12 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
     }
   };
 
-  const canRetake = quiz.allowRetakes !== false;
+  const canRetake = normalized.allowRetakes !== false;
 
   return (
     <Card>
       <CardContent className="space-y-4 p-4 sm:p-6">
-        {(quiz.questions || []).map((q) => (
+        {(normalized.questions || []).map((q) => (
           <div key={q.id} className="space-y-2">
             <div className="font-medium flex items-center gap-2">
               <span>{q.question}</span>
@@ -141,7 +161,7 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="text-sm">Score: {score} / {totalPoints} {score >= quiz.passingScore ? '✓ Passed' : '✗ Not Passed'}</div>
+            <div className="text-sm">Score: {score} / {totalPoints} {score >= normalized.passingScore ? '✓ Passed' : '✗ Not Passed'}</div>
             {canRetake && (
               <Button variant="outline" aria-label="Retake quiz" onClick={() => { setAnswers({}); setSubmitted(false); setScore(0); }}>Retake</Button>
             )}

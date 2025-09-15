@@ -52,7 +52,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col bg-white text-foreground">
         <Header />
-        <main className="flex-grow pb-14 pt-20 sm:pb-24 md:pb-0">{children}</main>
+        <main className="flex-grow pb-14 pt-10 sm:pb-24 md:pb-0">{children}</main>
         <BottomTabs />
         <Toaster />
         <ServiceWorkerRegister />

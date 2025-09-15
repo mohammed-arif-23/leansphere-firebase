@@ -136,7 +136,7 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
           </div>
         </div>
 
-        <header className="mb-6">
+        <header className="mb-2">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">{module.displayIndex ? `${module.displayIndex+"."} ` : ''}{module.title}</h1>
           <p className="text-base sm:text-lg text-muted-foreground mt-1">{course.title}</p>
           {isLocked && (
@@ -153,14 +153,6 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
               )}
             </div>
           )}
-          <div className="mt-3">
-            <div className="flex justify-between text-sm text-muted-foreground mb-1">
-              <span>Module Progress</span>
-              <span>{modProgressPct}%</span>
-            </div>
-            <Progress value={modProgressPct} className="h-2" />
-            <div className="text-xs text-muted-foreground mt-1">{completedBlocks} of {totalBlocks} items</div>
-          </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -218,6 +210,9 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
                             contentBlockId={b.id}
                             required={!!b.isRequired || Number.isFinite(Number(b.requiredPercent))}
                             requiredPercent={Number.isFinite(Number(b.requiredPercent)) ? Number(b.requiredPercent) : undefined}
+                            completed={completedBlockIds.has(b.id)}
+                            moduleCompleted={completedModuleIds.has(module.id)}
+                            studentId={String(auth.sub)}
                           />
                         </div>
                       )}
@@ -364,7 +359,9 @@ export default async function ModulePage({ params }: { params: Promise<{ courseI
             <div className="h-10" />
           </div>
           <aside className="lg:col-span-1 space-y-4 lg:sticky lg:top-20 self-start">
-            <StudyPanel courseId={course.id} moduleId={module.id} contextTitle={module.title} />
+            {!module.contentBlocks?.some(block => block.type === 'quiz') && (
+              <StudyPanel courseId={course.id} moduleId={module.id} contextTitle={module.title} />
+            )}
             
             {/* Gamification SkillTree removed: available on Profile page */}
             

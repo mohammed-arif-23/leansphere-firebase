@@ -123,7 +123,7 @@ export default function ModuleProgressClient({ courseId, moduleId, blocks, initi
     return () => window.clearInterval(interval);
   }, [activeId]);
 
-  // Flush time spent every 10s to server for the active block
+  // Flush time spent once per minute to server for the active block
   useEffect(() => {
     const flush = () => {
       const id = activeId;
@@ -133,7 +133,7 @@ export default function ModuleProgressClient({ courseId, moduleId, blocks, initi
       timeSpent.current.set(id, 0);
       sendUpdate(id, { timeSpent: seconds });
     };
-    const h = window.setInterval(flush, 10000);
+    const h = window.setInterval(flush, 60000);
     return () => window.clearInterval(h);
   }, [activeId, courseId, moduleId]);
 

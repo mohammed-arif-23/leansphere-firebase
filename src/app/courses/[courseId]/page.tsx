@@ -60,7 +60,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
               alt={course.title}
               fill
               sizes="100vw"
-              className="object-cover"
+              className="object-cover shi"
             />
           </div>
         </Card>

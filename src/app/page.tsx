@@ -43,17 +43,18 @@ export default async function HomePage() {
       {/* Auto Login handler: parses ?studentId= and attempts autologin */}
       <AutoLogin />
       {/* Single Pane Poster */}
-      <section className="relative min-h-[60vh] flex items-center overflow-hidden">
+      <section className="relative min-h-[40vh] flex items-center overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/10" />
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
           <div className="max-w-3xl">
-            <div className="text-sm text-muted-foreground mb-2 uppercase">dynamit</div>
+            <div className="flex items-center gap-2 mb-2">
+            <div className="text-lg sm:text-lg text-muted-foreground uppercase">dynamit </div><span className="text-white transition-all duration-100 ease-in-out  bg-black px-2 py-1 rounded-full text-xs font-medium shine">BETA</span></div>
             {auth?.name ? <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight">Welcome{auth?.name ? `, ${auth.name}` : (auth?.sub ? `, ${auth.sub}` : '')}</h1> : <h1 className="text-lg sm:text-lg font-extrabold tracking-tight">Login to continue</h1>}
-            <p className="mt-4 text-md sm:text-md text-muted-foreground">A minimal, fast and focused learning space.</p>
+            <p className="mt-4 text-md sm:text-md text-muted-foreground">A minimal, fast and focused learning space.</p> 
             <div className="mt-6 flex flex-wrap gap-3">
               {auth?.sub ? (
                 nextTarget ? (
-                  <a href="https://avsec-it.vercel.app/" className="inline-flex items-center border rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90">Back to Home</a>
+                  <a href="https://avsec-it.vercel.app/" className="inline-flex items-center border rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90 ">Back to Home</a>
                 ) : (
                   <a href="/profile" className="inline-flex items-center rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90">Go to Profile</a>
                 )

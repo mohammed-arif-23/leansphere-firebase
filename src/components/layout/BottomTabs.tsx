@@ -72,7 +72,7 @@ export default function BottomTabs() {
               </Link>
               {/* Per-tab indicator bar (left-to-right full-width animation) */}
               <div
-                className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-1 w-16 rounded-full bg-black origin-left transform transition-transform duration-500 ease-in-out ${
+                className={`absolute bottom-0 left-1/2  -translate-x-1/2 h-1 w-16 rounded-full bg-black origin-left transform transition-transform duration-500 ease-in-out ${
                   active ? 'scale-x-100' : 'scale-x-0'
                 }`}
                 aria-hidden="true"
