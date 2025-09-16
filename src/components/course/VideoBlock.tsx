@@ -30,6 +30,10 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
   const storageKey = (suffix: string) => `lsf:video:${studentId || 'anon'}:${courseId}:${moduleId}:${contentBlockId}:${suffix}`;
   const lastSavedRef = useRef<number>(-1);
   const lastBeatAtRef = useRef<number>(0);
+  // For disabling double-click / double-tap skip
+  const lastTapRef = useRef<number>(0);
+  const blockNextSeekRef = useRef<boolean>(false);
+  const prevTimeRef = useRef<number>(0);
   const normalizedRequired = (() => {
     const p = Number(requiredPercent);
     if (!Number.isFinite(p) || p <= 0) return 0;
@@ -198,6 +202,28 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
     v.addEventListener('timeupdate', onTimeUpdate);
     v.addEventListener('loadedmetadata', onLoadedMetadata);
     v.addEventListener('ended', onEnded);
+    // Intercept double-click to prevent browser skip gesture
+    const onDblClick = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+    v.addEventListener('dblclick', onDblClick, { passive: false } as any);
+    // Detect double-tap on touch devices and cancel ensuing seek
+    const onTouchEnd = (e: TouchEvent) => {
+      const now = Date.now();
+      if (now - (lastTapRef.current || 0) < 350) {
+        blockNextSeekRef.current = true;
+        prevTimeRef.current = v.currentTime || 0;
+        try { e.preventDefault(); } catch {}
+        try { e.stopPropagation(); } catch {}
+      }
+      lastTapRef.current = now;
+    };
+    const onSeeking = () => {
+      if (blockNextSeekRef.current) {
+        blockNextSeekRef.current = false;
+        try { v.currentTime = prevTimeRef.current || v.currentTime; } catch {}
+      }
+    };
+    v.addEventListener('touchend', onTouchEnd, { passive: false } as any);
+    v.addEventListener('seeking', onSeeking);
     // Also listen to a global module unlock event to allow seeking immediately
     const onModuleUnlock = () => setAllowSeek(true);
     try { window.addEventListener('module-unlock', onModuleUnlock as any); } catch {}
@@ -220,6 +246,9 @@ export default function VideoBlock({ src, poster, courseId, moduleId, contentBlo
       v.removeEventListener('timeupdate', onTimeUpdate);
       v.removeEventListener('loadedmetadata', onLoadedMetadata);
       v.removeEventListener('ended', onEnded);
+      v.removeEventListener('dblclick', onDblClick as any);
+      v.removeEventListener('touchend', onTouchEnd as any);
+      v.removeEventListener('seeking', onSeeking as any);
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
       try { window.removeEventListener('module-unlock', onModuleUnlock as any); } catch {}

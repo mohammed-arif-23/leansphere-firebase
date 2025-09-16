@@ -84,16 +84,42 @@ export default function QuizClient({ quiz, courseId, moduleId, contentBlockId, o
     setSubmitted(true);
     setCorrectness(corr);
     const passed = s >= (normalized.passingScore || 0);
-    if (passed && courseId && moduleId && contentBlockId) {
+    // Persist quiz attempt/results regardless of pass, if identifiers available
+    if (courseId && moduleId && contentBlockId) {
       try {
-        await fetch('/api/learning/progress/complete', {
+        await fetch('/api/learning/progress/update-self', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId, moduleId, contentBlockId })
+          body: JSON.stringify({
+            courseId,
+            moduleId,
+            contentBlockId,
+            update: {
+              quizProgress: {
+                score: s,
+                maxScore: totalPoints,
+                attempts: 1,
+                lastAttemptAt: new Date().toISOString(),
+              },
+              status: passed ? 'completed' : 'in-progress',
+              completedAt: passed ? new Date().toISOString() : undefined,
+            },
+          }),
         });
       } catch {}
-      try { window.dispatchEvent(new CustomEvent('module-unlock')); } catch {}
-      onPass && onPass();
+
+      // For compatibility, also mark as completed via legacy endpoint when passed
+      if (passed) {
+        try {
+          await fetch('/api/learning/progress/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId, moduleId, contentBlockId }),
+          });
+        } catch {}
+        try { window.dispatchEvent(new CustomEvent('module-unlock')); } catch {}
+        onPass && onPass();
+      }
     }
   };
 

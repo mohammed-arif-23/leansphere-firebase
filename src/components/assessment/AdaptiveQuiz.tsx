@@ -264,6 +264,42 @@ export default function AdaptiveQuiz({
       topicPerformance
     };
     
+    // Persist quiz progress and completion status
+    (async () => {
+      try {
+        await fetch('/api/learning/progress/update-self', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            moduleId,
+            contentBlockId,
+            update: {
+              quizProgress: {
+                score,
+                maxScore: 100,
+                attempts: 1,
+                lastAttemptAt: new Date().toISOString(),
+              },
+              status: score >= passingScore ? 'completed' : 'in-progress',
+              completedAt: score >= passingScore ? new Date().toISOString() : undefined,
+            },
+          }),
+        });
+      } catch {}
+      // For compatibility, mark as completed via legacy endpoint when passed
+      if (score >= passingScore) {
+        try {
+          await fetch('/api/learning/progress/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId, moduleId, contentBlockId }),
+          });
+        } catch {}
+        try { window.dispatchEvent(new CustomEvent('module-unlock')); } catch {}
+      }
+    })();
+
     setIsComplete(true);
     onComplete(results);
     

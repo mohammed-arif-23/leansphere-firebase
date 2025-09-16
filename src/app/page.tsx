@@ -43,7 +43,7 @@ export default async function HomePage() {
       {/* Auto Login handler: parses ?studentId= and attempts autologin */}
       <AutoLogin />
       {/* Single Pane Poster */}
-      <section className="relative min-h-[40vh] flex items-center overflow-hidden">
+      <section className="relative min-h-[60vh] mt-[-50px] flex items-center overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/10" />
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
           <div className="max-w-3xl">

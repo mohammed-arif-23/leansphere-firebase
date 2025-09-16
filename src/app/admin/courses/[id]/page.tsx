@@ -286,11 +286,33 @@ export default function AdminCourseEditorPage() {
 
   const onSave = async () => {
     if (!course) return;
+    // Normalize before sending to API to avoid null numbers
+    const payload = structuredClone(course);
+    try {
+      payload.modules = (Array.isArray(payload.modules) ? payload.modules : []).map((m: any, mi: number) => ({
+        ...m,
+        order: (typeof m.order === 'number' && !Number.isNaN(m.order)) ? m.order : mi + 1,
+        contentBlocks: (Array.isArray(m.contentBlocks) ? m.contentBlocks : []).map((b: any, bi: number) => {
+          const out: any = { ...b, order: (typeof b.order === 'number' && !Number.isNaN(b.order)) ? b.order : bi + 1 };
+          if (out.estimatedMinutes == null) delete out.estimatedMinutes;
+          if (out.type === 'quiz' && out.quiz) {
+            const qs = Array.isArray(out.quiz.questions) ? out.quiz.questions : [];
+            out.quiz = { ...out.quiz, questions: qs.map((q: any) => ({
+              ...q,
+              // keep options array as-is; API layer will normalize ids/correctIndex
+              options: Array.isArray(q.options) ? q.options : [],
+            })) };
+          }
+          return out;
+        })
+      }));
+    } catch {}
+
     setSaving(true);
     const res = await fetch(`/api/admin/courses/${encodeURIComponent(params.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(course),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (res.ok) {
@@ -2041,7 +2063,7 @@ export default function AdminCourseEditorPage() {
                                   <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
                                     <div className="md:col-span-5">
                                       <Label>Question</Label>
-                                      <Input value={q.text || ''} onChange={(e) => {
+                                      <Input value={(q.text ?? q.question ?? '')} onChange={(e) => {
                                         const qs = [...(b.quiz?.questions || [])];
                                         qs[qi] = { ...q, text: e.target.value };
                                         updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
@@ -2057,27 +2079,33 @@ export default function AdminCourseEditorPage() {
                                   <div className="space-y-2">
                                     <Label>Options</Label>
                                     <div className="space-y-2">
-                                      {(q.options || []).map((opt: string, oi: number) => (
-                                        <div key={oi} className="grid grid-cols-1 md:grid-cols-6 gap-2">
-                                          <div className="md:col-span-5">
-                                            <Input value={opt} onChange={(e) => {
-                                              const qs = [...(b.quiz?.questions || [])];
-                                              const arr = [...(q.options || [])];
-                                              arr[oi] = e.target.value;
-                                              qs[qi] = { ...q, options: arr };
-                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                            }} />
+                                      {(q.options || []).map((opt: any, oi: number) => {
+                                        const optText = typeof opt === 'string' ? opt : (opt?.text ?? '');
+                                        const isChecked = (q.correctIndex === oi) || (
+                                          q.correctOptionId && typeof opt !== 'string' && opt && opt.id === q.correctOptionId
+                                        );
+                                        return (
+                                          <div key={oi} className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                                            <div className="md:col-span-5">
+                                              <Input value={optText} onChange={(e) => {
+                                                const qs = [...(b.quiz?.questions || [])];
+                                                const arr = (q.options || []).map((o: any) => typeof o === 'string' ? o : (o?.text ?? ''));
+                                                arr[oi] = e.target.value;
+                                                qs[qi] = { ...q, options: arr };
+                                                updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                              }} />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <input aria-label="Mark correct" type="radio" name={`correct-${qi}`} checked={!!isChecked} onChange={() => {
+                                                const qs = [...(b.quiz?.questions || [])];
+                                                qs[qi] = { ...q, correctIndex: oi };
+                                                updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
+                                              }} />
+                                              <Button size="sm" variant="outline" disabled title="Fixed to 4 options">Remove</Button>
+                                            </div>
                                           </div>
-                                          <div className="flex items-center gap-2">
-                                            <input aria-label="Mark correct" type="radio" name={`correct-${qi}`} checked={q.correctIndex === oi} onChange={() => {
-                                              const qs = [...(b.quiz?.questions || [])];
-                                              qs[qi] = { ...q, correctIndex: oi };
-                                              updateBlock(m.id, b.id, { quiz: { ...(b.quiz || {}), questions: qs } });
-                                            }} />
-                                            <Button size="sm" variant="outline" disabled title="Fixed to 4 options">Remove</Button>
-                                          </div>
-                                        </div>
-                                      ))}
+                                        );
+                                      })}
                                       <div className="text-xs text-muted-foreground">Exactly 4 options are used per question.</div>
                                     </div>
                                   </div>

@@ -145,11 +145,33 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       try {
         const course = structuredClone(json);
         const modules = Array.isArray(course?.modules) ? course.modules : [];
-        for (const m of modules) {
+        modules.forEach((m: any, mIdx: number) => {
+          // Ensure required primitives
+          if (typeof m.title !== 'string') m.title = String(m.title ?? '');
+          // Coerce module.order
+          if (typeof m.order !== 'number' || Number.isNaN(m.order)) m.order = mIdx + 1;
+          // Clean up nullable numerics so Zod defaults apply
+          if (m.estimatedHours == null) delete m.estimatedHours;
+          if (m.displayIndex != null) m.displayIndex = String(m.displayIndex);
+          if (m.isLocked == null) delete m.isLocked;
+          if (m.sequentialRequired == null) delete m.sequentialRequired;
+          if (!Array.isArray(m.prerequisites)) m.prerequisites = [];
           const blocks = Array.isArray(m?.contentBlocks) ? m.contentBlocks : [];
-          for (const b of blocks) {
+          blocks.forEach((b: any, bIdx: number) => {
+            // Coerce block.order
+            if (typeof b.order !== 'number' || Number.isNaN(b.order)) b.order = bIdx + 1;
+            // Coerce estimatedMinutes if present as null
+            if (b.estimatedMinutes === null || b.estimatedMinutes === undefined) delete b.estimatedMinutes;
+            if (b.videoDuration == null) delete b.videoDuration;
+            if (b.requiredPercent == null) delete b.requiredPercent; else b.requiredPercent = Math.max(0, Math.min(1, Number(b.requiredPercent) || 0));
+            if (b.timeLimitMs == null) delete b.timeLimitMs;
+            if (b.memoryLimitMb == null) delete b.memoryLimitMb;
             if (b?.type === 'quiz' && b.quiz) {
               const qz = b.quiz;
+              // Coerce top-level quiz numerics
+              if (qz.passingScore == null) delete qz.passingScore; else qz.passingScore = Number(qz.passingScore) || 0;
+              if (qz.maxAttempts == null) delete qz.maxAttempts; else qz.maxAttempts = Number(qz.maxAttempts) || 0;
+              if (qz.timeLimit == null) delete qz.timeLimit; else qz.timeLimit = Number(qz.timeLimit) || 0;
               const qs = Array.isArray(qz.questions) ? qz.questions : [];
               b.quiz.questions = qs.map((q: any, qi: number) => {
                 const question = String(q.question ?? q.text ?? '');
@@ -173,13 +195,29 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
                 };
               });
             }
-          }
-        }
+          });
+        });
         return course;
       } catch {
         return json;
       }
     })();
+
+    // Also normalize top-level course fields
+    if (normalized) {
+      if (typeof normalized.title !== 'string') normalized.title = String(normalized.title ?? '');
+      if (typeof normalized.description !== 'string') normalized.description = String(normalized.description ?? '');
+      if (normalized.estimatedHours == null) delete normalized.estimatedHours;
+      if (normalized.enrollmentCount == null) delete normalized.enrollmentCount;
+      if (normalized.price == null) delete normalized.price;
+      if (normalized.isPublished == null) delete normalized.isPublished;
+      if (normalized.isActive == null) delete normalized.isActive;
+      if (normalized.isFree == null) delete normalized.isFree;
+      if (!Array.isArray(normalized.modules)) normalized.modules = [];
+      if (!Array.isArray(normalized.tags)) normalized.tags = [];
+      if (!Array.isArray(normalized.prerequisites)) normalized.prerequisites = [];
+      if (!Array.isArray(normalized.learningObjectives)) normalized.learningObjectives = [];
+    }
 
     const parsed = CourseSchema.safeParse(normalized);
     if (!parsed.success) {
