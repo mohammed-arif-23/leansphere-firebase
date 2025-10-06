@@ -66,7 +66,7 @@ export default async function ProfilePage() {
           </Card>
           {/* Back to Home button - use Next.js Link to keep navigation in WebView */}
           <div className="flex justify-center">
-            <Link href="https://avsec-it.vercel.app/" >
+            <Link href="https://avsec-it.vercel.app/dashboard" >
               <Button className="rounded-full shine" size="sm">
                 Back to Home
               </Button>
