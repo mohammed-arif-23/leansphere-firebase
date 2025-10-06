@@ -54,7 +54,7 @@ export default async function HomePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {auth?.sub ? (
                 nextTarget ? (
-                  <a href="https://avsec-it.vercel.app/" className="inline-flex items-center border rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90 ">Back to Home</a>
+                  <a href="https://avsec-it.vercel.app/dashboard" className="inline-flex items-center border rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90 ">Back to Home</a>
                 ) : (
                   <a href="/profile" className="inline-flex items-center rounded-full px-5 py-2.5 bg-black text-white hover:bg-primary/90">Go to Profile</a>
                 )
