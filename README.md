@@ -1,8 +1,3 @@
-# Firebase Studio
-
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
 # leansphere-firebase
 
 ---
@@ -124,26 +119,3 @@ This document is a practical, step-by-step workflow to transform the student sid
 - AI (Genkit)
   - `src/ai/genkit.ts` configures the provider (Google AI model). Ensure API keys via env.
 
-## Implementation Checklist
-- [x] Solid, minimal header and bottom tabs
-- [x] Theme tokens updated; rounded corners and subtle elevation
-- [x] Learn and Courses pages
-- [x] Course detail hero with contrast bar; solid chips
-- [x] Lesson player with AI Ask/Hints panel
-- [x] Skeleton loading UIs
-- [x] Summary removed; endpoint deprecated (410)
-- [ ] ARIA and keyboard nav verification
-- [ ] Prefetch next lesson, Lighthouse passes
-- [ ] Manifest + icons verification
-- [ ] Analytics hooks
-- [ ] Gamification polish
-
-## Release Plan
-1) Staging deploy → Run Lighthouse, install test on Android/Chrome.
-2) Fix A11y and Perf items to target 90+.
-3) Production deploy → Monitor AI endpoint usage and error rates.
-4) Iterate on gamification and analytics.
-
----
-
-For questions, see key files referenced above or open an issue with the route and screenshot.
